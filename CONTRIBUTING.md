@@ -1,7 +1,7 @@
 # Contributing to Defty
 
 Welcome, and thank you for your interest in contributing!  
-Defty is a fully open-source project licensed under the **Apache License 2.0**.  
+Defty is a fully open-source project licensed under the **Apache License 2.0**, copyright 2026 APRL Technologies Inc.  
 Contributions of all kinds are welcome — bug fixes, new hardware drivers, algorithm integrations, documentation, and example Skills.
 
 ---
@@ -11,7 +11,7 @@ Contributions of all kinds are welcome — bug fixes, new hardware drivers, algo
 ```bash
 git clone https://github.com/asd125202/defty.git ~/defty
 cd ~/defty
-conda create -n defty python=3.10 -y
+conda create -n defty python=3.12 -y
 conda activate defty
 pip install -e ".[dev]"
 pre-commit install
@@ -29,7 +29,8 @@ Every `.py` file must begin with the following header:
 
 **Original code:**
 ```python
-# Copyright (c) 2026 Yiju Li
+# Copyright (c) 2026 APRL Technologies Inc.
+# Author: Yiju Li
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,7 +47,8 @@ Every `.py` file must begin with the following header:
 
 **Code derived from LeRobot (HuggingFace):**
 ```python
-# Copyright (c) 2026 Yiju Li
+# Copyright (c) 2026 APRL Technologies Inc.
+# Author: Yiju Li
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
