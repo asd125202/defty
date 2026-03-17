@@ -90,10 +90,16 @@ defty status --path /other/project/project.yaml
 |---------|-------------|
 | `defty scan ports` | List all connected serial adapters with hardware fingerprint |
 | `defty scan cameras` | List all connected cameras with hardware fingerprint |
+| `defty scan find-port` | Identify an arm's port by unplugging/replugging *(interactive)* |
 
 ```bash
 defty scan ports
 defty scan cameras
+
+# If 'scan ports' shows nothing on Windows, install the CH341 driver first:
+# https://www.wch-ic.com/downloads/CH341SER_EXE.html
+# Then use find-port to confirm which COM port your arm is on:
+defty scan find-port
 ```
 
 ---
@@ -161,6 +167,29 @@ Output shows per-motor OK/FAIL (shoulder_pan, shoulder_lift, elbow_flex, wrist_f
 defty hardware import ~/old-project/project.yaml
 defty hardware import ~/old-project/   # also works (finds project.yaml automatically)
 ```
+
+---
+
+### Teleoperation
+
+| Command | Description |
+|---------|-------------|
+| `defty teleoperate` | Control follower arm in real-time by moving the leader arm |
+
+```bash
+# Auto-selects arms if exactly one leader + one follower is registered
+defty teleoperate
+
+# Explicit arm IDs (required when multiple leaders or followers exist)
+defty teleoperate --leader-id so101_leader_1 --follower-id so101_follower_1
+
+# Options
+defty teleoperate --fps 30              # control loop frequency (default: 60)
+defty teleoperate --duration 60         # stop after 60 seconds
+defty teleoperate --display             # show motor values + camera feeds via Rerun
+```
+
+Press **Ctrl+C** to stop. Both arms disconnect cleanly.
 
 ---
 
