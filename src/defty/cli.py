@@ -500,6 +500,120 @@ def health(path: str | None) -> None:
         sys.exit(1)
 
 
+# ── defty teleoperate ────────────────────────────────────────────────────────
+
+
+@main.command("teleoperate")
+@click.option("--leader-id", default=None, help="ID of the leader arm (auto-detected if unique).")
+@click.option("--follower-id", default=None, help="ID of the follower arm (auto-detected if unique).")
+@click.option("--fps", default=60, type=int, show_default=True, help="Control loop target FPS.")
+@click.option("--duration", default=None, type=float, help="Stop after N seconds (default: until Ctrl+C).")
+@click.option("--display", is_flag=True, help="Show motor values and camera feeds via Rerun.")
+@click.option("--path", "-p", default=None, hidden=True)
+def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
+    """Control a follower arm in real-time by moving a leader arm.
+
+    Leader and follower are read from project.yaml.  If the project has
+    exactly one arm of each role they are selected automatically; otherwise
+    pass ``--leader-id`` / ``--follower-id`` explicitly.
+
+    Press Ctrl+C to stop.
+    """
+    yaml_path, project = _ensure_project(path)
+    arms = project.get("hardware", {}).get("arms", [])
+
+    leaders = [a for a in arms if a.get("role") == "leader"]
+    followers = [a for a in arms if a.get("role") == "follower"]
+
+    # Resolve leader arm
+    if leader_id:
+        leader_arm = next((a for a in arms if a["id"] == leader_id), None)
+        if leader_arm is None:
+            click.echo(f"Error: leader arm '{leader_id}' not found.", err=True)
+            sys.exit(1)
+    elif len(leaders) == 1:
+        leader_arm = leaders[0]
+    elif len(leaders) == 0:
+        click.echo("Error: no leader arm registered. Run 'defty setup add-arm --role leader'.", err=True)
+        sys.exit(1)
+    else:
+        ids = [a["id"] for a in leaders]
+        click.echo(f"Error: multiple leaders found {ids}. Specify one with --leader-id.", err=True)
+        sys.exit(1)
+
+    # Resolve follower arm
+    if follower_id:
+        follower_arm = next((a for a in arms if a["id"] == follower_id), None)
+        if follower_arm is None:
+            click.echo(f"Error: follower arm '{follower_id}' not found.", err=True)
+            sys.exit(1)
+    elif len(followers) == 1:
+        follower_arm = followers[0]
+    elif len(followers) == 0:
+        click.echo("Error: no follower arm registered. Run 'defty setup add-arm --role follower'.", err=True)
+        sys.exit(1)
+    else:
+        ids = [a["id"] for a in followers]
+        click.echo(f"Error: multiple followers found {ids}. Specify one with --follower-id.", err=True)
+        sys.exit(1)
+
+    for arm in (leader_arm, follower_arm):
+        if not arm.get("port"):
+            click.echo(
+                f"Error: Arm '{arm['id']}' has no port. Run 'defty setup update'.", err=True
+            )
+            sys.exit(1)
+
+    calibration_dir = yaml_path.parent / "calibration"
+
+    try:
+        from lerobot.processor import make_default_processors
+        from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
+        from lerobot.scripts.lerobot_teleoperate import teleop_loop
+        from lerobot.teleoperators.so_leader import SOLeader, SOLeaderTeleopConfig
+    except ImportError as exc:
+        click.echo(f"Error: LeRobot not available — {exc}", err=True)
+        sys.exit(1)
+
+    teleop = SOLeader(SOLeaderTeleopConfig(
+        port=leader_arm["port"],
+        id=leader_arm["id"],
+        calibration_dir=calibration_dir,
+    ))
+    robot = SOFollower(SOFollowerRobotConfig(
+        port=follower_arm["port"],
+        id=follower_arm["id"],
+        calibration_dir=calibration_dir,
+    ))
+
+    teleop_action_proc, robot_action_proc, robot_obs_proc = make_default_processors()
+
+    click.echo(f"Teleoperate  leader={leader_arm['id']} ({leader_arm['port']})  "
+               f"→  follower={follower_arm['id']} ({follower_arm['port']})")
+    click.echo(f"FPS: {fps}   Duration: {f'{duration}s' if duration else 'until Ctrl+C'}")
+    click.echo("Press Ctrl+C to stop.")
+
+    teleop.connect()
+    robot.connect()
+
+    try:
+        teleop_loop(
+            teleop=teleop,
+            robot=robot,
+            fps=fps,
+            display_data=display,
+            duration=duration,
+            teleop_action_processor=teleop_action_proc,
+            robot_action_processor=robot_action_proc,
+            robot_observation_processor=robot_obs_proc,
+        )
+    except KeyboardInterrupt:
+        click.echo("\nTeleoperation stopped.")
+    finally:
+        teleop.disconnect()
+        robot.disconnect()
+
+
 # ── defty record ─────────────────────────────────────────────────────────────
 
 
