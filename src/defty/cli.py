@@ -182,13 +182,75 @@ def scan_ports() -> None:
     ports = list_serial_ports()
     if not ports:
         click.echo("No serial ports found.")
+        if sys.platform == "win32":
+            click.echo("")
+            click.echo("Tip: Feetech/Dynamixel arms use a CH340/CH341 USB-serial chip.")
+            click.echo("     If the arm is plugged in but missing here, install the driver:")
+            click.echo("     https://www.wch-ic.com/downloads/CH341SER_EXE.html")
+            click.echo("     Then re-plug the USB cable and retry.")
+            click.echo("")
+            click.echo("     To identify the port via plug/unplug, run:  defty scan find-port")
         return
     for p in ports:
         click.echo(f"  {p.port}")
+        click.echo(f"    description: {p.description or '(none)'}")
         click.echo(f"    hardware_id: {p.hardware_id or '(none)'}")
         click.echo(f"    vendor:      {p.vendor or '(unknown)'}")
         click.echo(f"    model:       {p.model or '(unknown)'}")
         click.echo(f"    serial:      {p.serial or '(none)'}")
+
+
+@scan.command("find-port")
+def scan_find_port() -> None:
+    """Identify a serial port by unplugging and replugging the device.
+
+    Lists ports before and after disconnection, then prints which port
+    disappeared -- that is your device's port.  This is the most
+    reliable method when 'defty scan ports' shows nothing or multiple
+    unknown ports.
+
+    NOTE: This command is intentionally interactive (requires a cable
+    unplug).  All other Defty commands are non-interactive.
+    """
+    import time
+
+    from serial.tools import list_ports as _lp
+
+    def _get_ports() -> set[str]:
+        return {p.device for p in _lp.comports()}
+
+    click.echo("=== defty scan find-port ===")
+    click.echo("")
+    ports_before = _get_ports()
+    if ports_before:
+        click.echo(f"Ports currently visible ({len(ports_before)}):")
+        for p in sorted(ports_before):
+            click.echo(f"  {p}")
+    else:
+        click.echo("No serial ports visible yet.")
+    click.echo("")
+    click.echo("Unplug the USB cable from your arm, then press Enter...")
+    input()
+
+    time.sleep(0.5)
+    ports_after = _get_ports()
+    disappeared = sorted(ports_before - ports_after)
+    appeared = sorted(ports_after - ports_before)
+
+    if len(disappeared) == 1:
+        click.echo(f"\n✓ Found it!  Your arm is on port: {disappeared[0]}")
+        click.echo("\nPlease reconnect the USB cable.")
+    elif len(disappeared) == 0:
+        click.echo("\nNo port disappeared.  Possible causes:")
+        click.echo("  • The USB cable was not unplugged, or")
+        click.echo("  • The driver is not installed (Windows: install CH341SER)")
+        click.echo("    https://www.wch-ic.com/downloads/CH341SER_EXE.html")
+    else:
+        click.echo(f"\nMultiple ports disappeared: {disappeared}")
+        click.echo("Unplug one device at a time and retry.")
+
+    if appeared:
+        click.echo(f"\nNote: new port(s) appeared during the test: {appeared}")
 
 
 @scan.command("cameras")
