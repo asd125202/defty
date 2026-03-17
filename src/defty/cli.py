@@ -254,12 +254,13 @@ def scan_find_port() -> None:
 
 
 @scan.command("cameras")
-@click.option("--preview", is_flag=True, help="Show ASCII art snapshot of each camera to help identify it.")
+@click.option("--preview", is_flag=True, help="Live ASCII art stream from each camera (press q to advance, Ctrl+C to quit).")
 def scan_cameras(preview: bool) -> None:
     """List all connected cameras with fingerprint data.
 
-    Use --preview to display a brief ASCII-art snapshot from each camera so
-    you can visually identify which index belongs to which physical device.
+    Use --preview to stream a live ASCII-art view from each camera so you
+    can visually identify which index belongs to which physical device.
+    Press 'q' to move to the next camera, Ctrl+C to stop.
     """
     from defty.hardware.detector import list_cameras
 
@@ -272,41 +273,89 @@ def scan_cameras(preview: bool) -> None:
         click.echo(f"    device:      {c.device}")
         click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
         if preview:
-            _camera_ascii_preview(c.index)
+            _camera_ascii_stream(c.index)
 
 
-def _camera_ascii_preview(index: int, width: int = 80) -> None:
-    """Capture one frame from *index* and print it as ASCII art."""
+def _camera_ascii_stream(index: int, width: int = 80) -> None:
+    """Stream live ASCII art from camera *index* until 'q' or Ctrl+C."""
     try:
         import cv2
     except ImportError:
-        click.echo("    (preview unavailable: opencv-python not installed)", err=True)
+        click.echo("  (preview unavailable: opencv-python not installed)", err=True)
         return
 
-    cap = cv2.VideoCapture(index)
+    # Enable ANSI escape codes on Windows (required for cursor movement)
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_ulong()
+        kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+        kernel32.SetConsoleMode(handle, mode.value | 4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY)
     if not cap.isOpened():
-        click.echo(f"    (preview failed: could not open camera {index})")
+        click.echo(f"  (could not open camera {index})")
         return
-
-    ret, frame = cap.read()
-    cap.release()
-    if not ret or frame is None:
-        click.echo(f"    (preview failed: no frame from camera {index})")
-        return
-
-    # Resize to ASCII canvas (chars are roughly 2× taller than wide)
-    h, w = frame.shape[:2]
-    new_w = width
-    new_h = max(1, int(h * new_w / w * 0.45))
-    small = cv2.resize(frame, (new_w, new_h))
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
     palette = " .,:;i1tfLCG08@"
     n = len(palette) - 1
-    click.echo(f"    {'─' * width}")
-    for row in gray:
-        click.echo("    " + "".join(palette[int(p / 255 * n)] for p in row))
-    click.echo(f"    {'─' * width}")
+    frame_lines = 0  # how many terminal lines the last frame used
+
+    click.echo(f"\n  Streaming camera [{index}] — q = next camera, Ctrl+C = quit\n")
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                break
+
+            h, w = frame.shape[:2]
+            new_w = width
+            new_h = max(1, int(h * new_w / w * 0.45))
+            small = cv2.resize(frame, (new_w, new_h))
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+            # Build ASCII frame
+            border = "─" * new_w
+            rows = [border]
+            for row in gray:
+                rows.append("".join(palette[int(p / 255 * n)] for p in row))
+            rows.append(border)
+
+            # Move cursor up to overwrite previous frame (skip first render)
+            if frame_lines:
+                sys.stdout.write(f"\033[{frame_lines}A\033[0J")
+
+            sys.stdout.write("\n".join(rows) + "\n")
+            sys.stdout.flush()
+            frame_lines = len(rows)
+
+            # Non-blocking key check
+            if sys.platform == "win32":
+                import msvcrt
+                if msvcrt.kbhit():
+                    ch = msvcrt.getch()
+                    if ch.lower() in (b"q", b"\x1b"):
+                        break
+            else:
+                import select, tty, termios
+                fd = sys.stdin.fileno()
+                old = termios.tcgetattr(fd)
+                try:
+                    tty.setraw(fd)
+                    if select.select([sys.stdin], [], [], 0)[0]:
+                        ch = sys.stdin.read(1)
+                        if ch.lower() in ("q", "\x1b"):
+                            break
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cap.release()
+        click.echo("\n  Stream ended.")
 
 
 # ── defty setup ──────────────────────────────────────────────────────────────
