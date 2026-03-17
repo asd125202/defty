@@ -750,13 +750,17 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
 
     Uses the leader arm to control the follower arm and records the
     resulting trajectories as a LeRobot dataset.  Each dataset is stored
-    under ``data/<name>/`` inside the project directory.
+    under ``data/<name>/`` inside the project directory.  A new numbered
+    dataset (``<project>_001``, ``_002``, …) is created automatically on
+    each run unless ``--dataset-name`` is given.
 
     Example:
 
     \b
         defty record --episodes 20 --task "Pick the red cube"
-        defty record --resume --episodes 10 --task "Pick the red cube"   # add to existing
+        defty record --dataset-name my_run --episodes 10 --task "..."
+        defty record --resume                                     # append to latest
+        defty record --resume --dataset-name test_001 --episodes 5
 
     \b
     Keyboard controls during recording:
@@ -768,13 +772,17 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
 
     # ── Banner ────────────────────────────────────────────────────────────────
     task_label = task or "Task recorded with Defty"
+    ds_label = dataset_name if dataset_name else "(auto-numbered)"
+    resume_label = "yes — appending to existing dataset" if resume else "no"
     sep = "═" * 55
     click.echo(f"""
 {sep}
   defty record
   Task     : {task_label}
+  Dataset  : {ds_label}
   Episodes : {episodes}
-  Controls : → save episode   ← re-record   Esc stop
+  Resume   : {resume_label}
+  Controls : → save   ← re-record   Esc stop
 {sep}
 """)
     _ensure_project(path)

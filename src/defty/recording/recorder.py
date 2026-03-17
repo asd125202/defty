@@ -36,7 +36,36 @@ logger = logging.getLogger(__name__)
 __all__ = ["record"]
 
 
-# ── Logging prettifier ────────────────────────────────────────────────────────
+# ── Dataset name helpers ──────────────────────────────────────────────────────
+
+
+def _auto_dataset_name(data_dir: Path, base: str) -> str:
+    """Return the next free numbered dataset name: ``base_001``, ``base_002``, …"""
+    existing: set[str] = set()
+    if data_dir.exists():
+        existing = {p.name for p in data_dir.iterdir() if p.is_dir()}
+    for i in range(1, 10_000):
+        candidate = f"{base}_{i:03d}"
+        if candidate not in existing:
+            return candidate
+    import time  # extreme fallback
+    return f"{base}_{int(time.time())}"
+
+
+def _latest_dataset(data_dir: Path) -> str | None:
+    """Return the name of the most-recently-modified valid dataset dir, or None."""
+    if not data_dir.exists():
+        return None
+    valid = [
+        d for d in data_dir.iterdir()
+        if d.is_dir() and (d / "meta" / "info.json").exists()
+    ]
+    if not valid:
+        return None
+    return max(valid, key=lambda d: d.stat().st_mtime).name
+
+
+
 
 _PHASE_MAP: dict[str, tuple[str, str]] = {
     "Recording episode": ("🔴", "REC"),
@@ -162,15 +191,31 @@ def record(
 
     rec_cfg = project.get("recording", {})
     record_fps = fps or rec_cfg.get("fps", 30)
-    ds_name = dataset_name or proj_name
-    # lerobot requires repo_id in "namespace/name" format even for local datasets
-    if "/" not in ds_name:
-        ds_name = f"local/{ds_name}"
 
-    # Each dataset lives in its own subdirectory: data/<local_name>/
-    # This avoids FileExistsError when the parent data/ dir already exists.
+    data_dir = yaml_path.parent / "data"
+
+    if resume:
+        # --resume without --dataset-name → pick the most recently modified dataset
+        if dataset_name is None:
+            auto = _latest_dataset(data_dir)
+            if auto is None:
+                raise RuntimeError(
+                    "No existing dataset found to resume. "
+                    "Run 'defty record' (without --resume) to start a new one."
+                )
+            dataset_name = auto
+            logger.info("Auto-selected dataset to resume: %s", dataset_name)
+    else:
+        # No explicit name → auto-generate base_001, base_002, …
+        if dataset_name is None:
+            base = project.get("project", {}).get("name", "defty_project")
+            dataset_name = _auto_dataset_name(data_dir, base)
+
+    # lerobot requires repo_id in "namespace/name" format even for local datasets
+    ds_name = dataset_name if "/" in dataset_name else f"local/{dataset_name}"
+
     local_name = ds_name.split("/")[-1]
-    dataset_root_path = yaml_path.parent / "data" / local_name
+    dataset_root_path = data_dir / local_name
     dataset_root = str(dataset_root_path)
 
     # Pre-flight: handle leftover dirs from previous failed/aborted runs.
@@ -195,8 +240,8 @@ def record(
     calibration_dir = yaml_path.parent / "calibration"
 
     logger.info(
-        "Recording %d episode(s) at %d FPS — %d leader(s), %d follower(s), %d camera(s)",
-        num_episodes, record_fps, len(leaders), len(followers), len(cameras),
+        "Recording %d episode(s) into '%s' at %d FPS — %d leader(s), %d follower(s), %d camera(s)",
+        num_episodes, local_name, record_fps, len(leaders), len(followers), len(cameras),
     )
 
     try:
