@@ -93,6 +93,9 @@ def record(
     rec_cfg = project.get("recording", {})
     record_fps = fps or rec_cfg.get("fps", 30)
     ds_name = dataset_name or proj_name
+    # lerobot requires repo_id in "namespace/name" format even for local datasets
+    if "/" not in ds_name:
+        ds_name = f"local/{ds_name}"
     task_desc = task or "Task recorded with Defty"
 
     calibration_dir = yaml_path.parent / "calibration"
@@ -155,6 +158,7 @@ def record(
         teleop=leader_cfg,
         dataset=dataset_cfg,
         display_data=display,
+        play_sounds=False,  # disable: requires PowerShell on Windows (blocked by execution policy)
     )
 
     # @parser.wrap() passes cfg through when first arg is already the target type

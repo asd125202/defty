@@ -593,6 +593,15 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
     click.echo(f"FPS: {fps}   Duration: {f'{duration}s' if duration else 'until Ctrl+C'}")
     click.echo("Press Ctrl+C to stop.")
 
+    if display:
+        try:
+            from lerobot.utils.visualization_utils import init_rerun
+            import rerun as rr
+            init_rerun(session_name="defty-teleoperate")
+        except ImportError:
+            click.echo("Warning: Rerun not available, running without display.", err=True)
+            display = False
+
     teleop.connect()
     robot.connect()
 
@@ -610,6 +619,12 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
     except KeyboardInterrupt:
         click.echo("\nTeleoperation stopped.")
     finally:
+        if display:
+            try:
+                import rerun as rr
+                rr.rerun_shutdown()
+            except Exception:
+                pass
         teleop.disconnect()
         robot.disconnect()
 
