@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Wrap LeRobot's recording pipeline.
+"""Wrap LeRobot's recording pipeline.
 
 Reads the Defty `project.yaml`, constructs the LeRobot configuration
 objects, and delegates to `lerobot.scripts.lerobot_record`.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def record(
     dataset_name: str | None = None,
     push_to_hub: bool = False,
 ) -> None:
-    """"""Record teleoperation episodes using LeRobot.
+    """Record teleoperation episodes using LeRobot.
 
     Reads hardware configuration from `project.yaml`, builds the
     appropriate LeRobot `RecordConfig`, and calls the record script.
@@ -55,7 +55,7 @@ def record(
     Raises:
         FileNotFoundError: If no `project.yaml` can be found.
         RuntimeError: If hardware is not configured or not connected.
-    """"""
+    """
     project = load_project(project_path)
     proj_name = project.get("project", {}).get("name", "defty_project")
 
@@ -116,11 +116,11 @@ def _invoke_lerobot_record(
     dataset_name: str,
     push_to_hub: bool,
 ) -> None:
-    """"""Construct LeRobot objects and delegate to the record pipeline.
+    """Construct LeRobot objects and delegate to the record pipeline.
 
     This is the integration seam between Defty's config world and
     LeRobot's draccus dataclass world.
-    """"""
+    """
     try:
         from lerobot.motors.feetech import FeetechMotorsBus, Motor
         from lerobot.robots.so_follower import SOFollower, SOFollowerConfig
@@ -199,7 +199,7 @@ def _record_fallback(
     dataset_dir: str,
     dataset_name: str,
 ) -> None:
-    """"""Fallback recording path using direct robot API.""""""
+    """Fallback recording path using direct robot API."""
     logger.info("Using direct robot API for recording (fallback path)")
     # This will be fleshed out as LeRobot's API stabilizes
     raise NotImplementedError(
