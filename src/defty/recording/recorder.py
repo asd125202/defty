@@ -23,9 +23,12 @@ config object injection when the first argument is already the target type).
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 from pathlib import Path
 
 from defty.project import find_project_root, load_project
+from defty.utils import spawn_rerun_detached
 
 logger = logging.getLogger(__name__)
 
@@ -153,13 +156,38 @@ def record(
         episode_time_s=episode_time_s,
         reset_time_s=reset_time_s,
     )
+
+    # Pre-spawn Rerun viewer as a fully detached process so Ctrl+C during
+    # recording never sends SIGINT to the viewer.  We then tell lerobot to
+    # *connect* to it (display_ip/display_port) instead of spawning its own.
+    rerun_proc = None
+    display_ip = None
+    display_port = None
+    if display:
+        rerun_proc = spawn_rerun_detached()
+        if rerun_proc is not None:
+            display_ip = "127.0.0.1"
+            display_port = 9876
+        else:
+            logger.warning("Could not spawn Rerun viewer; recording without display.")
+            display = False
+
     cfg = RecordConfig(
         robot=follower_cfg,
         teleop=leader_cfg,
         dataset=dataset_cfg,
         display_data=display,
+        display_ip=display_ip,
+        display_port=display_port,
         play_sounds=False,  # disable: requires PowerShell on Windows (blocked by execution policy)
     )
 
-    # @parser.wrap() passes cfg through when first arg is already the target type
-    lerobot_record(cfg)
+    try:
+        # @parser.wrap() passes cfg through when first arg is already the target type
+        lerobot_record(cfg)
+    finally:
+        if rerun_proc is not None:
+            try:
+                rerun_proc.terminate()
+            except Exception:
+                pass

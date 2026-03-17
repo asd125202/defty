@@ -686,47 +686,17 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
     _rerun_proc = None
     if display:
         try:
-            import time
+            from defty.utils import spawn_rerun_detached
             import rerun as rr
-
-            # Locate the actual Rust rerun binary inside the rerun_sdk package.
-            # Bypassing the Python wrapper (Scripts/rerun.exe) avoids the
-            # subprocess.call() that catches Ctrl+C and prints a traceback.
-            _rerun_rust_exe = (
-                Path(rr.__file__).parent.parent
-                / "rerun_cli"
-                / ("rerun.exe" if sys.platform == "win32" else "rerun")
-            )
-            if not _rerun_rust_exe.exists():
-                raise FileNotFoundError(f"Rerun binary not found at {_rerun_rust_exe}")
-
-            # Spawn detached so our Ctrl+C doesn't reach the viewer process
-            if sys.platform == "win32":
-                _rerun_proc = subprocess.Popen(
-                    [str(_rerun_rust_exe)],
-                    creationflags=(
-                        subprocess.CREATE_NEW_PROCESS_GROUP
-                        | subprocess.DETACHED_PROCESS
-                    ),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            _rerun_proc = spawn_rerun_detached()
+            if _rerun_proc is not None:
+                rr.init("defty-teleoperate", spawn=False)
+                rr.connect_grpc()
             else:
-                _rerun_proc = subprocess.Popen(
-                    [str(_rerun_rust_exe)],
-                    start_new_session=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-
-            time.sleep(1.2)  # wait for gRPC server to be ready
-            rr.init("defty-teleoperate", spawn=False)
-            rr.connect_grpc()  # default: rerun+http://127.0.0.1:9876/proxy
+                click.echo("Warning: Rerun viewer could not start, running without display.", err=True)
+                display = False
         except Exception as exc:
             click.echo(f"Warning: Rerun unavailable ({exc}), running without display.", err=True)
-            if _rerun_proc is not None:
-                _rerun_proc.terminate()
-                _rerun_proc = None
             display = False
 
     teleop.connect()
