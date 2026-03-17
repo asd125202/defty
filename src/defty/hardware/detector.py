@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Hardware detection — serial ports and cameras.
+"""Hardware detection — serial ports and cameras.
 
 Provides cross-platform scanning for serial adapters and video capture
 devices.  Results include fingerprint data so callers can match a
 physical device to its stored configuration even when OS-assigned
 names change.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class SerialPortInfo:
-    """"""Discovered serial port with fingerprint metadata.""""""
+    """Discovered serial port with fingerprint metadata."""
 
     port: str
     hardware_id: str
@@ -66,7 +66,7 @@ class SerialPortInfo:
 
 
 def list_serial_ports() -> list[SerialPortInfo]:
-    """"""Scan for connected USB-to-serial adapters.
+    """Scan for connected USB-to-serial adapters.
 
     Uses `pyserial`'s `list_ports.comports()` which works on Linux,
     macOS, and Windows.
@@ -74,7 +74,7 @@ def list_serial_ports() -> list[SerialPortInfo]:
     Returns:
         A list of `SerialPortInfo` for every detected serial port,
         sorted by port name.
-    """"""
+    """
     results: list[SerialPortInfo] = []
     for p in sorted(list_ports.comports(), key=lambda x: x.device):
         info = resolve_hardware_info(p)
@@ -98,7 +98,7 @@ def list_serial_ports() -> list[SerialPortInfo]:
 
 @dataclass(frozen=True)
 class CameraInfo:
-    """"""Discovered camera device with fingerprint metadata.""""""
+    """Discovered camera device with fingerprint metadata."""
 
     device: str
     index: int
@@ -107,7 +107,7 @@ class CameraInfo:
 
 
 def list_cameras() -> list[CameraInfo]:
-    """"""Scan for connected video capture devices.
+    """Scan for connected video capture devices.
 
     Uses platform-specific strategies:
     - **Linux**: enumerates `/dev/video*` and filters to capture-capable
@@ -117,7 +117,7 @@ def list_cameras() -> list[CameraInfo]:
 
     Returns:
         A list of `CameraInfo` for every detected camera.
-    """"""
+    """
     system = platform.system()
     if system == "Linux":
         cameras = _scan_cameras_linux()
@@ -136,7 +136,7 @@ def list_cameras() -> list[CameraInfo]:
 
 
 def _is_capture_node_linux(device: str) -> bool:
-    """"""Check if a /dev/video* node supports video capture (not just metadata).""""""
+    """Check if a /dev/video* node supports video capture (not just metadata)."""
     try:
         out = subprocess.check_output(
             ["v4l2-ctl", "--device", device, "--all"],
@@ -150,7 +150,7 @@ def _is_capture_node_linux(device: str) -> bool:
 
 
 def _scan_cameras_linux() -> list[CameraInfo]:
-    """"""Scan /dev/video* on Linux, deduplicate by hardware ID.""""""
+    """Scan /dev/video* on Linux, deduplicate by hardware ID."""
     seen_hw_ids: set[str] = set()
     cameras: list[CameraInfo] = []
 
@@ -176,7 +176,7 @@ def _scan_cameras_linux() -> list[CameraInfo]:
 
 
 def _v4l2_card_name(device: str) -> str:
-    """"""Read the V4L2 card name for a device.""""""
+    """Read the V4L2 card name for a device."""
     try:
         out = subprocess.check_output(
             ["v4l2-ctl", "--device", device, "--info"],
@@ -196,7 +196,7 @@ def _v4l2_card_name(device: str) -> str:
 
 
 def _scan_cameras_macos() -> list[CameraInfo]:
-    """"""Scan cameras on macOS via system_profiler.""""""
+    """Scan cameras on macOS via system_profiler."""
     try:
         out = subprocess.check_output(
             ["system_profiler", "SPCameraDataType"],
@@ -248,7 +248,7 @@ def _scan_cameras_macos() -> list[CameraInfo]:
 
 
 def _scan_cameras_windows() -> list[CameraInfo]:
-    """"""Scan cameras on Windows via pnputil.""""""
+    """Scan cameras on Windows via pnputil."""
     try:
         out = subprocess.check_output(
             ["pnputil", "/enum-devices", "/class", "Camera", "/connected"],
@@ -290,7 +290,7 @@ def _scan_cameras_windows() -> list[CameraInfo]:
 
 
 def _windows_iid_to_hwid(iid: str) -> str:
-    """"""Convert a Windows instance ID to a hardware fingerprint.""""""
+    """Convert a Windows instance ID to a hardware fingerprint."""
     vid_match = re.search(r"VID_([0-9A-Fa-f]{4})", iid)
     pid_match = re.search(r"PID_([0-9A-Fa-f]{4})", iid)
     if vid_match and pid_match:
