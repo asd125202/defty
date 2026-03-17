@@ -14,17 +14,18 @@
 # limitations under the License.
 """Wrap LeRobot's recording pipeline.
 
-Reads the Defty `project.yaml`, constructs the LeRobot configuration
-objects, and delegates to `lerobot.scripts.lerobot_record`.
+Reads the Defty ``project.yaml``, constructs the correct LeRobot
+``RecordConfig``, and calls ``lerobot.scripts.lerobot_record.record``
+directly (bypassing draccus CLI parsing — the wrapper supports direct
+config object injection when the first argument is already the target type).
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
-from defty.project import load_project
+from defty.project import find_project_root, load_project
 
 logger = logging.getLogger(__name__)
 
@@ -37,172 +38,124 @@ def record(
     num_episodes: int = 1,
     fps: int | None = None,
     dataset_name: str | None = None,
+    task: str | None = None,
     push_to_hub: bool = False,
+    episode_time_s: float = 60,
+    reset_time_s: float = 60,
+    display: bool = False,
 ) -> None:
     """Record teleoperation episodes using LeRobot.
 
-    Reads hardware configuration from `project.yaml`, builds the
-    appropriate LeRobot `RecordConfig`, and calls the record script.
+    Reads hardware configuration from ``project.yaml``, builds a
+    ``RecordConfig``, and calls LeRobot's record pipeline directly.
 
     Args:
-        project_path: Path to `project.yaml` or its parent directory.
+        project_path: Path to ``project.yaml`` or its parent directory.
                       Searches upward from cwd if *None*.
         num_episodes: Number of episodes to record.
         fps: Override the recording FPS from project config.
-        dataset_name: Dataset name. Defaults to `<project_name>_dataset`.
-        push_to_hub: Whether to push the dataset to the HuggingFace Hub.
+        dataset_name: Dataset repo_id (e.g. ``username/my_dataset`` for Hub,
+                      or a plain name for local storage).
+        task: One-line task description (e.g. "Pick the red cube").
+        push_to_hub: Push dataset to HuggingFace Hub after recording.
+        episode_time_s: Seconds of recording per episode.
+        reset_time_s: Seconds to reset the environment between episodes.
+        display: Show camera feeds and motor values via Rerun.
 
     Raises:
-        FileNotFoundError: If no `project.yaml` can be found.
-        RuntimeError: If hardware is not configured or not connected.
+        FileNotFoundError: If no ``project.yaml`` can be found.
+        RuntimeError: If hardware is not configured.
     """
-    project = load_project(project_path)
+    # Resolve project
+    if project_path is not None:
+        p = Path(project_path)
+        yaml_path = p if p.name == "project.yaml" else p / "project.yaml"
+    else:
+        yaml_path = find_project_root()
+
+    project = load_project(yaml_path)
     proj_name = project.get("project", {}).get("name", "defty_project")
 
     arms = project.get("hardware", {}).get("arms", [])
     cameras = project.get("hardware", {}).get("cameras", [])
 
     if not arms:
-        msg = "No arms configured. Run 'defty setup add-arm' first."
-        raise RuntimeError(msg)
+        raise RuntimeError("No arms configured. Run 'defty setup add-arm' first.")
 
-    # Resolve recording parameters
-    rec_cfg = project.get("recording", {})
-    record_fps = fps or rec_cfg.get("fps", 30)
-    dataset_dir = rec_cfg.get("dataset_dir", "data")
-    ds_name = dataset_name or f"{proj_name}_dataset"
-
-    # Find leader and follower arms
     leaders = [a for a in arms if a.get("role") == "leader"]
     followers = [a for a in arms if a.get("role") == "follower"]
 
     if not leaders:
-        msg = "No leader arm configured. Add a leader arm for teleoperation recording."
-        raise RuntimeError(msg)
+        raise RuntimeError("No leader arm found. Add one with 'defty setup add-arm --role leader'.")
     if not followers:
-        msg = "No follower arm configured. Add a follower arm for teleoperation recording."
-        raise RuntimeError(msg)
+        raise RuntimeError("No follower arm found. Add one with 'defty setup add-arm --role follower'.")
+
+    rec_cfg = project.get("recording", {})
+    record_fps = fps or rec_cfg.get("fps", 30)
+    ds_name = dataset_name or proj_name
+    task_desc = task or "Task recorded with Defty"
+
+    calibration_dir = yaml_path.parent / "calibration"
 
     logger.info(
         "Recording %d episode(s) at %d FPS — %d leader(s), %d follower(s), %d camera(s)",
-        num_episodes,
-        record_fps,
-        len(leaders),
-        len(followers),
-        len(cameras),
+        num_episodes, record_fps, len(leaders), len(followers), len(cameras),
     )
 
-    # Build LeRobot config and call record
-    _invoke_lerobot_record(
-        leaders=leaders,
-        followers=followers,
-        cameras=cameras,
-        num_episodes=num_episodes,
-        fps=record_fps,
-        dataset_dir=dataset_dir,
-        dataset_name=ds_name,
-        push_to_hub=push_to_hub,
-    )
-
-
-def _invoke_lerobot_record(
-    *,
-    leaders: list[dict[str, Any]],
-    followers: list[dict[str, Any]],
-    cameras: list[dict[str, Any]],
-    num_episodes: int,
-    fps: int,
-    dataset_dir: str,
-    dataset_name: str,
-    push_to_hub: bool,
-) -> None:
-    """Construct LeRobot objects and delegate to the record pipeline.
-
-    This is the integration seam between Defty's config world and
-    LeRobot's draccus dataclass world.
-    """
     try:
-        from lerobot.motors.feetech import FeetechMotorsBus, Motor
-        from lerobot.robots.so_follower import SOFollower, SOFollowerConfig
-        from lerobot.teleoperators.so100 import SO100Leader, SO100LeaderConfig
-    except ImportError as exc:
-        msg = "LeRobot is not installed. Run: pip install 'defty[dev]'"
-        raise RuntimeError(msg) from exc
-
-    # Build leader teleoperator(s)
-    leader_configs: list[tuple[str, Any]] = []
-    for ldr in leaders:
-        port = ldr.get("port", "")
-        arm_id = ldr.get("id", "leader")
-        calibration = ldr.get("calibration", {})
-        leader_cfg = SO100LeaderConfig(port=port)
-        leader_configs.append((arm_id, leader_cfg))
-
-    # Build follower robot(s)
-    follower_configs: list[tuple[str, Any]] = []
-    for flw in followers:
-        port = flw.get("port", "")
-        arm_id = flw.get("id", "follower")
-        calibration = flw.get("calibration", {})
-        follower_cfg = SOFollowerConfig(port=port)
-        follower_configs.append((arm_id, follower_cfg))
-
-    # Build camera configs
-    camera_dict: dict[str, int | str] = {}
-    for cam in cameras:
-        cam_id = cam.get("id", "cam_0")
-        device = cam.get("device", "")
-        camera_dict[cam_id] = int(device) if device.isdigit() else device
-
-    logger.info("Delegating to LeRobot record pipeline...")
-
-    # For now, use the first leader/follower pair
-    # TODO: Support multi-arm recording when LeRobot adds the capability
-    leader_id, leader_cfg = leader_configs[0]
-    follower_id, follower_cfg = follower_configs[0]
-
-    try:
+        from lerobot.robots.so_follower import SOFollowerRobotConfig
+        from lerobot.teleoperators.so_leader import SOLeaderTeleopConfig
+        from lerobot.scripts.lerobot_record import DatasetRecordConfig, RecordConfig
         from lerobot.scripts.lerobot_record import record as lerobot_record
+    except ImportError as exc:
+        raise RuntimeError(f"LeRobot not available: {exc}") from exc
 
-        lerobot_record(
-            robot_type="so101",
-            robot_overrides=[f"leader_arms.main.port={leader_cfg.port}", f"follower_arms.main.port={follower_cfg.port}"],
-            fps=fps,
-            root=dataset_dir,
-            repo_id=dataset_name,
-            num_episodes=num_episodes,
-            push_to_hub=push_to_hub,
-        )
-    except TypeError:
-        logger.warning(
-            "LeRobot record API signature may have changed. "
-            "Falling back to direct robot construction."
-        )
-        _record_fallback(
-            leader_cfg=leader_cfg,
-            follower_cfg=follower_cfg,
-            cameras=camera_dict,
-            num_episodes=num_episodes,
-            fps=fps,
-            dataset_dir=dataset_dir,
-            dataset_name=dataset_name,
-        )
+    leader = leaders[0]
+    follower = followers[0]
 
+    # Build camera config dict for the follower robot
+    camera_configs: dict = {}
+    for cam in cameras:
+        try:
+            from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
+            device = cam.get("device", "0")
+            idx = int(device) if str(device).isdigit() else device
+            camera_configs[cam["id"]] = OpenCVCameraConfig(
+                index_or_path=idx,
+                width=cam.get("width", 640),
+                height=cam.get("height", 480),
+                fps=int(cam.get("fps", 30)),
+            )
+        except ImportError:
+            logger.warning("OpenCV camera config unavailable; skipping camera %s", cam.get("id"))
 
-def _record_fallback(
-    *,
-    leader_cfg: Any,
-    follower_cfg: Any,
-    cameras: dict[str, int | str],
-    num_episodes: int,
-    fps: int,
-    dataset_dir: str,
-    dataset_name: str,
-) -> None:
-    """Fallback recording path using direct robot API."""
-    logger.info("Using direct robot API for recording (fallback path)")
-    # This will be fleshed out as LeRobot's API stabilizes
-    raise NotImplementedError(
-        "Direct recording fallback not yet implemented. "
-        "Please ensure LeRobot >= 0.5.1 is installed."
+    follower_cfg = SOFollowerRobotConfig(
+        port=follower["port"],
+        id=follower["id"],
+        calibration_dir=calibration_dir,
+        cameras=camera_configs,
     )
+    leader_cfg = SOLeaderTeleopConfig(
+        port=leader["port"],
+        id=leader["id"],
+        calibration_dir=calibration_dir,
+    )
+    dataset_cfg = DatasetRecordConfig(
+        repo_id=ds_name,
+        single_task=task_desc,
+        root=str(yaml_path.parent / "data"),
+        fps=record_fps,
+        num_episodes=num_episodes,
+        push_to_hub=push_to_hub,
+        episode_time_s=episode_time_s,
+        reset_time_s=reset_time_s,
+    )
+    cfg = RecordConfig(
+        robot=follower_cfg,
+        teleop=leader_cfg,
+        dataset=dataset_cfg,
+        display_data=display,
+    )
+
+    # @parser.wrap() passes cfg through when first arg is already the target type
+    lerobot_record(cfg)

@@ -619,18 +619,40 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
-@click.option("--episodes", "-e", default=1, type=int, help="Number of episodes to record.")
+@click.option("--episodes", "-e", default=1, type=int, show_default=True, help="Number of episodes to record.")
 @click.option("--fps", default=None, type=int, help="Override recording FPS.")
-@click.option("--dataset-name", default=None)
-@click.option("--push-to-hub", is_flag=True)
-def record(path, episodes, fps, dataset_name, push_to_hub) -> None:
-    """Record teleoperation episodes."""
+@click.option("--task", default=None, help="One-line task description, e.g. 'Pick the red cube'.")
+@click.option("--dataset-name", default=None, help="Dataset name / HuggingFace repo_id.")
+@click.option("--episode-time", default=60.0, type=float, show_default=True, help="Seconds per episode.")
+@click.option("--reset-time", default=60.0, type=float, show_default=True, help="Seconds to reset between episodes.")
+@click.option("--display", is_flag=True, help="Show camera feeds via Rerun.")
+@click.option("--push-to-hub", is_flag=True, help="Push dataset to HuggingFace Hub.")
+def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, display, push_to_hub) -> None:
+    """Record teleoperation episodes.
+
+    Uses the leader arm to control the follower arm and records the
+    resulting trajectories as a LeRobot dataset.
+
+    Example:
+
+    \b
+        defty record --episodes 20 --task "Pick the red cube"
+    """
     from defty.recording.recorder import record as do_record
 
-    _ensure_project(path)  # ensure project exists before delegating
+    _ensure_project(path)
     try:
-        do_record(project_path=path, num_episodes=episodes, fps=fps,
-                  dataset_name=dataset_name, push_to_hub=push_to_hub)
+        do_record(
+            project_path=path,
+            num_episodes=episodes,
+            fps=fps,
+            task=task,
+            dataset_name=dataset_name,
+            episode_time_s=episode_time,
+            reset_time_s=reset_time,
+            display=display,
+            push_to_hub=push_to_hub,
+        )
     except (FileNotFoundError, RuntimeError) as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
