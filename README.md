@@ -200,11 +200,13 @@ Press **Ctrl+C** to stop. Both arms disconnect cleanly.
 | `defty record` | Record teleoperation episodes via LeRobot |
 
 ```bash
-defty record                            # 1 episode, settings from project.yaml
-defty record --episodes 20
+defty record                                              # 1 episode, defaults from project.yaml
+defty record --episodes 20 --task "Pick the red cube"    # task description is recommended
 defty record --episodes 10 --fps 60
 defty record --dataset-name my_dataset
-defty record --push-to-hub              # push to HuggingFace Hub after recording
+defty record --episode-time 30 --reset-time 10           # seconds per episode / reset
+defty record --display                                    # show camera feeds via Rerun
+defty record --push-to-hub                               # push to HuggingFace Hub after recording
 ```
 
 ---
