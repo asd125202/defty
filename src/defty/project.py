@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Defty project management — project.yaml CRUD operations.
+"""Defty project management — project.yaml CRUD operations.
 
 A Defty project is a directory containing a `project.yaml` file.
 This module provides helpers to initialise, load, save and query that file.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def init_project(
     name: str | None = None,
     description: str = "",
 ) -> Path:
-    """"""Create a new Defty project in *directory*.
+    """Create a new Defty project in *directory*.
 
     Creates the directory (including parents) if it does not exist, writes a
     default `project.yaml`, and returns the path to the file.
@@ -76,7 +76,7 @@ def init_project(
 
     Raises:
         FileExistsError: If `project.yaml` already exists in *directory*.
-    """"""
+    """
     root = Path(directory).resolve()
     root.mkdir(parents=True, exist_ok=True)
 
@@ -95,7 +95,7 @@ def init_project(
 
 
 def load_project(path: str | Path | None = None) -> dict[str, Any]:
-    """"""Load a `project.yaml` from disk.
+    """Load a `project.yaml` from disk.
 
     Args:
         path: Explicit path to project.yaml **or** a directory that contains
@@ -106,7 +106,7 @@ def load_project(path: str | Path | None = None) -> dict[str, Any]:
 
     Raises:
         FileNotFoundError: If no project.yaml can be located.
-    """"""
+    """
     if path is None:
         yaml_path = find_project_root()
     else:
@@ -125,12 +125,12 @@ def load_project(path: str | Path | None = None) -> dict[str, Any]:
 
 
 def save_project(path: str | Path, data: dict[str, Any]) -> None:
-    """"""Write *data* to a `project.yaml` file.
+    """Write *data* to a `project.yaml` file.
 
     Args:
         path: Destination file path.
         data: The project dict to serialise.
-    """"""
+    """
     p = Path(path)
     with open(p, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -138,7 +138,7 @@ def save_project(path: str | Path, data: dict[str, Any]) -> None:
 
 
 def find_project_root(start: str | Path | None = None) -> Path:
-    """"""Walk upward from *start* until a `project.yaml` is found.
+    """Walk upward from *start* until a `project.yaml` is found.
 
     Args:
         start: Starting directory.  Defaults to the current working directory.
@@ -148,7 +148,7 @@ def find_project_root(start: str | Path | None = None) -> Path:
 
     Raises:
         FileNotFoundError: If no `project.yaml` is found.
-    """"""
+    """
     current = Path(start or Path.cwd()).resolve()
     while True:
         candidate = current / PROJECT_FILENAME
@@ -166,7 +166,7 @@ def find_project_root(start: str | Path | None = None) -> Path:
 
 
 def _deep_copy_default() -> dict[str, Any]:
-    """"""Return a deep copy of the default project template.""""""
+    """Return a deep copy of the default project template."""
     import copy
 
     return copy.deepcopy(_DEFAULT_PROJECT)
