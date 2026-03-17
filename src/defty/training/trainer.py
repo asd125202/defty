@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Wrap LeRobot's training pipeline.
+"""Wrap LeRobot's training pipeline.
 
 Reads the Defty `project.yaml` training section, constructs the
 appropriate LeRobot `TrainConfig`, and delegates to
 `lerobot.scripts.lerobot_train`.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def train(
     learning_rate: float | None = None,
     push_to_hub: bool = False,
 ) -> None:
-    """"""Train a policy using LeRobot.
+    """Train a policy using LeRobot.
 
     Reads configuration from `project.yaml`, merges with any explicit
     overrides, and delegates to LeRobot's training entry point.
@@ -61,7 +61,7 @@ def train(
     Raises:
         FileNotFoundError: If no `project.yaml` can be found.
         RuntimeError: If LeRobot is not installed.
-    """"""
+    """
     project = load_project(project_path)
     proj_name = project.get("project", {}).get("name", "defty_project")
 
@@ -106,7 +106,7 @@ def _invoke_lerobot_train(
     learning_rate: float | None,
     push_to_hub: bool,
 ) -> None:
-    """"""Construct LeRobot train config and call the training pipeline.""""""
+    """Construct LeRobot train config and call the training pipeline."""
     try:
         from lerobot.scripts.lerobot_train import train as lerobot_train
     except ImportError as exc:
