@@ -254,8 +254,13 @@ def scan_find_port() -> None:
 
 
 @scan.command("cameras")
-def scan_cameras() -> None:
-    """List all connected cameras with fingerprint data."""
+@click.option("--preview", is_flag=True, help="Show ASCII art snapshot of each camera to help identify it.")
+def scan_cameras(preview: bool) -> None:
+    """List all connected cameras with fingerprint data.
+
+    Use --preview to display a brief ASCII-art snapshot from each camera so
+    you can visually identify which index belongs to which physical device.
+    """
     from defty.hardware.detector import list_cameras
 
     cameras = list_cameras()
@@ -266,6 +271,42 @@ def scan_cameras() -> None:
         click.echo(f"  [{c.index}] {c.name or '(unnamed)'}")
         click.echo(f"    device:      {c.device}")
         click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
+        if preview:
+            _camera_ascii_preview(c.index)
+
+
+def _camera_ascii_preview(index: int, width: int = 80) -> None:
+    """Capture one frame from *index* and print it as ASCII art."""
+    try:
+        import cv2
+    except ImportError:
+        click.echo("    (preview unavailable: opencv-python not installed)", err=True)
+        return
+
+    cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        click.echo(f"    (preview failed: could not open camera {index})")
+        return
+
+    ret, frame = cap.read()
+    cap.release()
+    if not ret or frame is None:
+        click.echo(f"    (preview failed: no frame from camera {index})")
+        return
+
+    # Resize to ASCII canvas (chars are roughly 2× taller than wide)
+    h, w = frame.shape[:2]
+    new_w = width
+    new_h = max(1, int(h * new_w / w * 0.45))
+    small = cv2.resize(frame, (new_w, new_h))
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+    palette = " .,:;i1tfLCG08@"
+    n = len(palette) - 1
+    click.echo(f"    {'─' * width}")
+    for row in gray:
+        click.echo("    " + "".join(palette[int(p / 255 * n)] for p in row))
+    click.echo(f"    {'─' * width}")
 
 
 # ── defty setup ──────────────────────────────────────────────────────────────
@@ -595,8 +636,14 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 
     if display:
         try:
+            import os
             from lerobot.utils.visualization_utils import init_rerun
             import rerun as rr
+            # rerun.exe lives alongside python.exe in the venv Scripts dir but
+            # is not on PATH when launched via defty.exe — add it temporarily.
+            scripts_dir = str(Path(sys.executable).parent)
+            if scripts_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = scripts_dir + os.pathsep + os.environ.get("PATH", "")
             init_rerun(session_name="defty-teleoperate")
         except ImportError:
             click.echo("Warning: Rerun not available, running without display.", err=True)
@@ -652,9 +699,18 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
 
     \b
         defty record --episodes 20 --task "Pick the red cube"
+
+    \b
+    Keyboard controls during recording:
+      →  Right arrow   End current episode (saves it, moves to reset phase)
+      ←  Left arrow    Re-record last episode (discards it, records again)
+      Esc              Stop recording immediately
     """
     from defty.recording.recorder import record as do_record
 
+    click.echo(
+        "Recording controls:  → end episode   ← re-record last   Esc stop"
+    )
     _ensure_project(path)
     try:
         do_record(

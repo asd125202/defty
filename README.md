@@ -90,11 +90,13 @@ defty status --path /other/project/project.yaml
 |---------|-------------|
 | `defty scan ports` | List all connected serial adapters with hardware fingerprint |
 | `defty scan cameras` | List all connected cameras with hardware fingerprint |
+| `defty scan cameras --preview` | Show ASCII art snapshot from each camera to visually identify it |
 | `defty scan find-port` | Identify an arm's port by unplugging/replugging *(interactive)* |
 
 ```bash
 defty scan ports
 defty scan cameras
+defty scan cameras --preview    # ASCII art frame from each camera — match index to physical device
 
 # If 'scan ports' shows nothing on Windows, install the CH341 driver first:
 # https://www.wch-ic.com/downloads/CH341SER_EXE.html
@@ -208,6 +210,18 @@ defty record --episode-time 30 --reset-time 10           # seconds per episode /
 defty record --display                                    # show camera feeds via Rerun
 defty record --push-to-hub                               # push to HuggingFace Hub after recording
 ```
+
+**Keyboard controls while recording:**
+
+| Key | Action |
+|-----|--------|
+| `→` Right arrow | End current episode early (saves it, moves to reset phase) |
+| `←` Left arrow | Re-record last episode (discards it, records again) |
+| `Esc` | Stop recording immediately |
+
+> **Tip — adding cameras:** register cameras first with `defty setup add-camera`, then they
+> are automatically included in every `defty record` session. Use `defty scan cameras --preview`
+> to match each camera index to a physical device before adding.
 
 ---
 
