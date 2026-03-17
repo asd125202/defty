@@ -171,15 +171,17 @@ def run(
         )
 
     # ── Resolve dataset for recording ────────────────────────────────────
+    # lerobot requires dataset name to start with "eval_" when a policy is used
     if record:
         if dataset_name is None:
-            base = f"run_{model_name}"
+            base = f"eval_{model_name}"
             dataset_name = _auto_dataset_name(data_dir, base)
+        elif not dataset_name.startswith("eval_"):
+            dataset_name = f"eval_{dataset_name}"
         ds_name = dataset_name if "/" in dataset_name else f"local/{dataset_name}"
     else:
         # Even when not recording, lerobot needs a dataset config.
-        # Use a temporary name that we discard afterwards.
-        ds_name = f"local/_run_tmp_{model_name}"
+        ds_name = f"local/eval_tmp_{model_name}"
 
     local_name = ds_name.split("/")[-1]
     dataset_root_path = data_dir / local_name
