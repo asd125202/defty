@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Hardware registry — manages the `hardware` section of `project.yaml`.
+"""Hardware registry — manages the `hardware` section of `project.yaml`.
 
 All mutations go through this module so that the rest of the codebase
 never has to worry about the YAML schema.  Every function takes the
 project dict (as returned by `defty.project.load_project`) as its
 first argument and returns the mutated dict.  The caller is responsible
 for persisting changes via `defty.project.save_project`.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def generate_arm_id(
     robot_type: str = "so101",
     role: str = "follower",
 ) -> str:
-    """"""Generate a short, unique default ID for an arm.
+    """Generate a short, unique default ID for an arm.
 
     Pattern: `<robot_type>_<role>_<n>` — e.g. `so101_follower_1`.
 
@@ -61,7 +61,7 @@ def generate_arm_id(
 
     Returns:
         A unique arm ID string.
-    """"""
+    """
     existing = {a["id"] for a in project.get("hardware", {}).get("arms", [])}
     n = 1
     while True:
@@ -75,7 +75,7 @@ def generate_camera_id(
     project: dict[str, Any],
     position: str = "",
 ) -> str:
-    """"""Generate a short, unique default ID for a camera.
+    """Generate a short, unique default ID for a camera.
 
     If *position* is given (e.g. `wrist`), produces `cam_wrist`.
     Otherwise produces `cam_0`, `cam_1`, …
@@ -86,7 +86,7 @@ def generate_camera_id(
 
     Returns:
         A unique camera ID string.
-    """"""
+    """
     existing = {c["id"] for c in project.get("hardware", {}).get("cameras", [])}
 
     if position:
@@ -121,7 +121,7 @@ def add_arm(
     role: str = "follower",
     label: str = "",
 ) -> dict[str, Any]:
-    """"""Register a new robot arm in the project.
+    """Register a new robot arm in the project.
 
     Args:
         project: The project dict to mutate.
@@ -137,7 +137,7 @@ def add_arm(
 
     Raises:
         ValueError: If an arm with the same *arm_id* already exists.
-    """"""
+    """
     hw = project.setdefault("hardware", {})
     arms: list[dict[str, Any]] = hw.setdefault("arms", [])
 
@@ -163,7 +163,7 @@ def add_arm(
 
 
 def remove_arm(project: dict[str, Any], arm_id: str) -> dict[str, Any]:
-    """"""Remove a registered arm by its ID.
+    """Remove a registered arm by its ID.
 
     Args:
         project: The project dict to mutate.
@@ -174,7 +174,7 @@ def remove_arm(project: dict[str, Any], arm_id: str) -> dict[str, Any]:
 
     Raises:
         KeyError: If no arm with *arm_id* exists.
-    """"""
+    """
     arms: list[dict[str, Any]] = project.get("hardware", {}).get("arms", [])
     for i, a in enumerate(arms):
         if a["id"] == arm_id:
@@ -199,7 +199,7 @@ def add_camera(
     height: int = 480,
     fps: float = 30.0,
 ) -> dict[str, Any]:
-    """"""Register a new camera in the project.
+    """Register a new camera in the project.
 
     Args:
         project: The project dict to mutate.
@@ -216,7 +216,7 @@ def add_camera(
 
     Raises:
         ValueError: If a camera with the same *camera_id* already exists.
-    """"""
+    """
     hw = project.setdefault("hardware", {})
     cameras: list[dict[str, Any]] = hw.setdefault("cameras", [])
 
@@ -242,7 +242,7 @@ def add_camera(
 
 
 def remove_camera(project: dict[str, Any], camera_id: str) -> dict[str, Any]:
-    """"""Remove a registered camera by its ID.
+    """Remove a registered camera by its ID.
 
     Args:
         project: The project dict to mutate.
@@ -253,7 +253,7 @@ def remove_camera(project: dict[str, Any], camera_id: str) -> dict[str, Any]:
 
     Raises:
         KeyError: If no camera with *camera_id* exists.
-    """"""
+    """
     cameras: list[dict[str, Any]] = project.get("hardware", {}).get("cameras", [])
     for i, c in enumerate(cameras):
         if c["id"] == camera_id:
@@ -268,7 +268,7 @@ def remove_camera(project: dict[str, Any], camera_id: str) -> dict[str, Any]:
 
 
 def update_ports(project: dict[str, Any]) -> dict[str, Any]:
-    """"""Re-scan hardware and update port assignments using fingerprints.
+    """Re-scan hardware and update port assignments using fingerprints.
 
     Iterates over registered arms and cameras, matches their stored
     `hardware_id` against currently connected devices, and updates the
@@ -279,7 +279,7 @@ def update_ports(project: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         The mutated project dict.
-    """"""
+    """
     # Build lookup: hardware_id -> current port
     serial_hw_map: dict[str, str] = {}
     for sp in list_serial_ports():
@@ -316,7 +316,7 @@ def update_ports(project: dict[str, Any]) -> dict[str, Any]:
 
 
 def _slugify(text: str) -> str:
-    """"""Convert text to a lowercase slug suitable for use in IDs.""""""
+    """Convert text to a lowercase slug suitable for use in IDs."""
     text = text.lower().strip()
     text = re.sub(r"[^a-z0-9]+", "_", text)
     return text.strip("_")
