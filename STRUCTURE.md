@@ -31,6 +31,10 @@ defty/
 │       │   ├── __init__.py          # Re-exports record()
 │       │   └── recorder.py          # Wrap LeRobot recording pipeline
 │       │
+│       ├── inference/
+│       │   ├── __init__.py          # Re-exports run()
+│       │   └── runner.py            # Run trained policy on robot
+│       │
 │       └── training/
 │           ├── __init__.py          # Re-exports train()
 │           └── trainer.py           # Wrap LeRobot training pipeline

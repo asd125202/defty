@@ -1187,6 +1187,80 @@ def hardware_import(source_path, path) -> None:
     click.echo(f"Imported {added_arms} arm(s) and {added_cams} camera(s) from {source}")
 
 
+# ── defty run ────────────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--model-name", "-m", default=None, help="Model name from models/. Default: latest.")
+@click.option("--episodes", "-e", default=1, type=int, help="Number of episodes to run.")
+@click.option("--display/--no-display", default=False, help="Show live camera feed in Rerun.")
+@click.option("--vision/--no-vision", default=True, help="Enable cameras (disable for state-only policies).")
+@click.option("--record/--no-record", default=False, help="Save the rollout as a dataset.")
+@click.option("--dataset-name", default=None, help="Dataset name when recording. Default: auto.")
+@click.option("--fps", default=None, type=int, help="Override control/recording FPS.")
+@click.option("--episode-time", default=60.0, type=float, help="Max seconds per episode.")
+@click.option("--reset-time", default=10.0, type=float, help="Seconds between episodes for reset.")
+@click.option("--path", "-p", default=None, hidden=True)
+def run(model_name, episodes, display, vision, record, dataset_name, fps,
+        episode_time, reset_time, path) -> None:
+    """Run a trained policy on the robot.
+
+    Loads a model from ``models/<name>/`` and executes it on the robot
+    autonomously — no teleoperation needed.  The robot observes its
+    environment (cameras + joint state) and the policy predicts actions.
+
+    \b
+    Controls during execution:
+      → (Right arrow)  End current episode, start next
+      Esc              Stop immediately
+
+    \b
+    Examples:
+      defty run                                  # latest model, 1 episode
+      defty run --model-name act_test_002_001    # specific model
+      defty run --episodes 5 --display           # 5 episodes with Rerun
+      defty run --no-vision                      # state-only (no cameras)
+      defty run --record                         # save rollout as dataset
+      defty run --episodes 3 --record --dataset-name my_run
+    """
+    from defty.inference.runner import run as do_run
+
+    yaml_path, _project = _ensure_project(path)
+
+    # ── Banner ────────────────────────────────────────────────────────────
+    model_label = model_name or "(latest)"
+    vis_label = "cameras + state" if vision else "state only"
+    rec_label = "yes" if record else "no"
+    sep = "═" * 55
+    click.echo(f"""
+{sep}
+  defty run
+  Model    : {model_label}
+  Episodes : {episodes}
+  Vision   : {vis_label}
+  Record   : {rec_label}
+  Controls : → next episode   Esc stop
+{sep}
+""")
+
+    try:
+        do_run(
+            project_path=path,
+            model_name=model_name,
+            episodes=episodes,
+            display=display,
+            vision=vision,
+            record=record,
+            dataset_name=dataset_name,
+            fps=fps,
+            episode_time_s=episode_time,
+            reset_time_s=reset_time,
+        )
+    except (FileNotFoundError, RuntimeError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
 # ── defty upgrade ────────────────────────────────────────────────────────────
 
 

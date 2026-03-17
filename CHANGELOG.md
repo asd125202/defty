@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`defty run` command** — run a trained policy on the robot autonomously
+  - `--model-name` / `--episodes` / `--display` / `--record` / `--no-vision`
+  - With vision (cameras + state) or without vision (state-only) mode
+  - Optional rollout recording to `data/run_<model>_NNN/`
+  - Auto-selects latest model and best available device (CUDA/MPS/CPU)
 - `defty datasets` command — list all recorded datasets with episode count, frames, FPS, size, task
 - `defty models` command — list all trained models with policy type, steps, source dataset, size
 - `defty replay` command — visualize a recorded episode in Rerun (`--episode`, `--save`)

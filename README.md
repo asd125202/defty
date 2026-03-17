@@ -340,6 +340,47 @@ Opens the **Rerun viewer** showing synchronized camera frames and joint position
 
 ---
 
+### Run (Model Inference)
+
+| Command | Description |
+|---------|-------------|
+| `defty run` | Run a trained policy on the robot |
+
+```bash
+# Run the latest model for 1 episode
+defty run
+
+# Run a specific model
+defty run --model-name act_test_002_001
+
+# Run 5 episodes with live camera feed in Rerun
+defty run --episodes 5 --display
+
+# State-only mode (no cameras) — for state-only policies or debugging
+defty run --no-vision
+
+# Save the rollout as a dataset for later analysis
+defty run --record
+defty run --episodes 3 --record --dataset-name my_experiment
+
+# Combined: 10 episodes, display + record
+defty run -e 10 --display --record
+```
+
+**Controls during execution:**
+- **→ (Right arrow)**: End current episode, move to next
+- **Esc**: Stop immediately
+
+**Two vision modes:**
+| Mode | Flag | Description |
+|------|------|-------------|
+| With vision | `--vision` (default) | Cameras active, policy sees images + joint state |
+| Without vision | `--no-vision` | Cameras disabled, state-only observations |
+
+When `--record` is used, the rollout is saved to `data/run_<model>_001/` (auto-numbered).
+
+---
+
 ### Maintenance
 
 | Command | Description |
@@ -404,12 +445,17 @@ defty record --episodes 20 --task "Pick the burger" --display
 defty datasets
 
 # 8. Train
-defty train --policy act --steps 100000
+defty train --policy act --steps 10000
 
 # 9. Check trained models
 defty models
 
-# 10. Replay an episode to review data
+# 10. Run the model on the robot
+defty run                                   # 1 episode, latest model
+defty run --episodes 5 --display            # 5 episodes with Rerun
+defty run --episodes 3 --record             # run + save rollout
+
+# 11. Replay an episode to review data
 defty replay --dataset-name my-robot_001 --episode 0
 ```
 
