@@ -167,7 +167,9 @@ def train(
         }
         policy_cls = policy_map.get(policy.lower())
         if policy_cls is not None:
-            cfg.policy = policy_cls()
+            policy_inst = policy_cls()
+            policy_inst.push_to_hub = False  # ACTConfig defaults push_to_hub=True
+            cfg.policy = policy_inst
         else:
             raise RuntimeError(f"Unknown policy: {policy}")
     except ImportError as exc:
