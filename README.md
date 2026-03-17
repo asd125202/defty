@@ -22,12 +22,21 @@ irm https://raw.githubusercontent.com/asd125202/defty/main/install.ps1 | iex
 ```
 
 The installer automatically:
-- Downloads and installs [uv](https://docs.astral.sh/uv/) (fast Python package manager)
-- Installs Python 3.12 via uv
-- Installs the `defty` CLI
-- Adds `defty` to your PATH
+- Downloads [uv](https://docs.astral.sh/uv/) (fast Python package manager)
+- Installs Python 3.12
+- Installs the `defty` CLI and adds it to your PATH
 
-No admin/root required. No conda. No virtual environment to activate.
+No admin/root required. No conda. No virtual environment to activate manually.
+
+### GPU acceleration (NVIDIA CUDA)
+
+After the standard install, switch to the CUDA-enabled torch wheel:
+
+```bash
+uv tool install "git+https://github.com/asd125202/defty.git" --extra cuda --force
+```
+
+Apple Silicon (MPS) and CPU are supported out of the box with no extra steps.
 
 ### Manual install (for contributors)
 
@@ -37,49 +46,219 @@ cd defty
 pip install -e ".[dev]"
 ```
 
-### GPU acceleration (NVIDIA CUDA)
+---
 
-After installation, switch to the CUDA-enabled torch wheel:
+## Update & Uninstall
 
 ```bash
-uv tool install "git+https://github.com/asd125202/defty.git" --extra cuda --force
-```
+# Update to latest
+defty upgrade
 
-Apple Silicon (MPS) and CPU are supported out of the box — no extra steps needed.
+# Uninstall defty
+uv tool uninstall defty
+
+# Also remove uv (optional)
+# Linux/macOS:
+rm ~/.local/bin/uv ~/.local/bin/uvx
+# Windows:
+Remove-Item $env:USERPROFILE\.local\bin\uv.exe
+```
 
 ---
 
-## Quick start
+## Complete Command Reference
+
+### Project
+
+| Command | Description |
+|---------|-------------|
+| `defty init [DIRECTORY]` | Create a new Defty project (`project.yaml`) |
+| `defty status` | Show project summary: arms, cameras, calibration state |
 
 ```bash
-# 1. Create a project
-mkdir my-robot && cd my-robot
-defty init --name "my-robot"
+defty init                          # init in current directory
+defty init ~/my-robot --name "my-robot" --description "SO-101 follower"
+defty status
+defty status --path /other/project/project.yaml
+```
 
-# 2. See what hardware is connected
-defty scan ports      # serial adapters (robot arms)
-defty scan cameras    # video devices
+---
 
-# 3. Register hardware (use port from scan output)
+### Hardware — Scanning
+
+| Command | Description |
+|---------|-------------|
+| `defty scan ports` | List all connected serial adapters with hardware fingerprint |
+| `defty scan cameras` | List all connected cameras with hardware fingerprint |
+
+```bash
+defty scan ports
+defty scan cameras
+```
+
+---
+
+### Hardware — Setup
+
+| Command | Description |
+|---------|-------------|
+| `defty setup add-arm` | Register a robot arm in the project |
+| `defty setup add-camera` | Register a camera in the project |
+| `defty setup calibrate` | Calibrate an arm *(only interactive command)* |
+| `defty setup update` | Re-scan and update port assignments via fingerprints |
+| `defty setup remove-arm` | Remove a registered arm |
+| `defty setup remove-camera` | Remove a registered camera |
+
+```bash
+# Add arms
 defty setup add-arm --port /dev/ttyACM0 --role follower
 defty setup add-arm --port /dev/ttyACM1 --role leader
-defty setup add-camera --device /dev/video0 --position wrist
+defty setup add-arm --port COM3 --role follower --robot-type so101 --label "right arm"
+defty setup add-arm --port /dev/ttyACM0 --role follower --id my_follower
 
-# 4. Calibrate (only interactive step — requires physical arm movement)
+# Add cameras
+defty setup add-camera --device /dev/video0 --position wrist
+defty setup add-camera --device 0 --position overhead --width 1280 --height 720 --fps 30
+defty setup add-camera --device /dev/video2 --position "front" --id cam_front
+
+# Calibrate (physically move the arm when prompted)
 defty setup calibrate --arm-id so101_follower_1
 defty setup calibrate --arm-id so101_leader_1
 
-# 5. Health check (pings all 6 motors + cameras)
-defty health
+# If port names changed after reboot — auto-fix via hardware fingerprint
+defty setup update
 
-# 6. Record teleoperation data
-defty record --episodes 10
-
-# 7. Train a policy
-defty train --policy act --epochs 100
+# Remove
+defty setup remove-arm --arm-id so101_follower_1
+defty setup remove-camera --camera-id cam_wrist
 ```
 
-> **Windows**: replace `/dev/ttyACM0` with `COM3` and `/dev/video0` with `0`.
+---
+
+### Hardware — Health
+
+| Command | Description |
+|---------|-------------|
+| `defty health` | Ping all 6 motors per arm + grab a frame from each camera |
+
+```bash
+defty health
+defty health --path /other/project/project.yaml
+```
+
+Output shows per-motor OK/FAIL (shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper).
+
+---
+
+### Hardware — Import
+
+| Command | Description |
+|---------|-------------|
+| `defty hardware import SOURCE` | Copy hardware config from another project |
+
+```bash
+# Re-use calibration from a previous project
+defty hardware import ~/old-project/project.yaml
+defty hardware import ~/old-project/   # also works (finds project.yaml automatically)
+```
+
+---
+
+### Recording
+
+| Command | Description |
+|---------|-------------|
+| `defty record` | Record teleoperation episodes via LeRobot |
+
+```bash
+defty record                            # 1 episode, settings from project.yaml
+defty record --episodes 20
+defty record --episodes 10 --fps 60
+defty record --dataset-name my_dataset
+defty record --push-to-hub              # push to HuggingFace Hub after recording
+```
+
+---
+
+### Training
+
+| Command | Description |
+|---------|-------------|
+| `defty train` | Train a policy on recorded data via LeRobot |
+
+```bash
+defty train                             # ACT policy, settings from project.yaml
+defty train --policy act
+defty train --policy diffusion
+defty train --epochs 200 --batch-size 32 --lr 1e-4
+defty train --dataset-name my_dataset --output-dir outputs/run1
+defty train --push-to-hub               # push model to HuggingFace Hub
+```
+
+---
+
+### Maintenance
+
+| Command | Description |
+|---------|-------------|
+| `defty upgrade` | Upgrade defty to the latest version |
+| `defty uninstall` | Print uninstall instructions |
+| `defty --version` | Show version |
+
+```bash
+defty upgrade
+defty uninstall
+defty --version
+defty --help
+defty <command> --help    # help for any subcommand
+```
+
+---
+
+### Global flags
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` / `-v` | Enable debug logging |
+| `--version` | Show version and exit |
+| `--help` | Show help |
+
+```bash
+defty -v health            # debug output
+defty -v record --episodes 5
+```
+
+---
+
+## project.yaml structure
+
+```yaml
+defty_version: "0.1.0"
+project:
+  name: my-robot
+  description: ""
+hardware:
+  arms:
+    - id: so101_follower_1
+      robot_type: so101
+      role: follower
+      port: /dev/ttyACM0
+      hardware_id: "serial:CP2102_USB_to_UART@1-1.2"
+      label: "right arm"
+      calibration: {}
+  cameras:
+    - id: cam_wrist
+      device: /dev/video0
+      hardware_id: "serial:Suyin_HD_Camera_001@platform-usb-0:2.4"
+      position: wrist
+      width: 640
+      height: 480
+      fps: 30.0
+recording:
+  fps: 30
+  dataset_dir: data
+training: {}
+```
 
 ---
 
@@ -87,21 +266,24 @@ defty train --policy act --epochs 100
 
 ```
 defty/
+├── install.sh / install.ps1   ← one-line installers
 ├── src/defty/
-│   ├── cli.py          ← Click CLI (all commands)
-│   ├── project.py      ← project.yaml CRUD
-│   ├── platform.py     ← cross-platform OS detection
-│   ├── hardware/       ← detection, fingerprinting, health, registry
-│   ├── recording/      ← wraps lerobot-record
-│   └── training/       ← wraps lerobot-train
-├── install.sh          ← one-line installer (Linux/macOS)
-└── install.ps1         ← one-line installer (Windows)
+│   ├── cli.py                 ← all CLI commands (Click)
+│   ├── project.py             ← project.yaml CRUD
+│   ├── platform.py            ← OS detection
+│   ├── hardware/
+│   │   ├── detector.py        ← serial + camera scanning
+│   │   ├── fingerprint.py     ← USB hardware fingerprinting
+│   │   ├── registry.py        ← add/remove/update arms & cameras
+│   │   └── health.py          ← motor ping + camera check
+│   ├── recording/recorder.py  ← wraps lerobot-record
+│   └── training/trainer.py    ← wraps lerobot-train
+└── tests/
 ```
 
-Three-layer design:
-1. **Core library** (`src/defty/`) — open source, Apache 2.0
-2. **CLI** (`defty` command) — open source, Apache 2.0
-3. **GUI** — future closed-source layer on top
+**Supports**: Linux · macOS · Windows  
+**Python**: 3.12+  
+**Hardware**: SO-101 (leader + follower), USB cameras
 
 ---
 
