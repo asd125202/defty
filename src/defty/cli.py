@@ -683,19 +683,50 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
     click.echo(f"FPS: {fps}   Duration: {f'{duration}s' if duration else 'until Ctrl+C'}")
     click.echo("Press Ctrl+C to stop.")
 
+    _rerun_proc = None
     if display:
         try:
-            import os
-            from lerobot.utils.visualization_utils import init_rerun
+            import time
             import rerun as rr
-            # rerun.exe lives alongside python.exe in the venv Scripts dir but
-            # is not on PATH when launched via defty.exe — add it temporarily.
-            scripts_dir = str(Path(sys.executable).parent)
-            if scripts_dir not in os.environ.get("PATH", ""):
-                os.environ["PATH"] = scripts_dir + os.pathsep + os.environ.get("PATH", "")
-            init_rerun(session_name="defty-teleoperate")
-        except ImportError:
-            click.echo("Warning: Rerun not available, running without display.", err=True)
+
+            # Locate the actual Rust rerun binary inside the rerun_sdk package.
+            # Bypassing the Python wrapper (Scripts/rerun.exe) avoids the
+            # subprocess.call() that catches Ctrl+C and prints a traceback.
+            _rerun_rust_exe = (
+                Path(rr.__file__).parent.parent
+                / "rerun_cli"
+                / ("rerun.exe" if sys.platform == "win32" else "rerun")
+            )
+            if not _rerun_rust_exe.exists():
+                raise FileNotFoundError(f"Rerun binary not found at {_rerun_rust_exe}")
+
+            # Spawn detached so our Ctrl+C doesn't reach the viewer process
+            if sys.platform == "win32":
+                _rerun_proc = subprocess.Popen(
+                    [str(_rerun_rust_exe)],
+                    creationflags=(
+                        subprocess.CREATE_NEW_PROCESS_GROUP
+                        | subprocess.DETACHED_PROCESS
+                    ),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                _rerun_proc = subprocess.Popen(
+                    [str(_rerun_rust_exe)],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+            time.sleep(1.2)  # wait for gRPC server to be ready
+            rr.init("defty-teleoperate", spawn=False)
+            rr.connect_grpc()  # default: rerun+http://127.0.0.1:9876/proxy
+        except Exception as exc:
+            click.echo(f"Warning: Rerun unavailable ({exc}), running without display.", err=True)
+            if _rerun_proc is not None:
+                _rerun_proc.terminate()
+                _rerun_proc = None
             display = False
 
     teleop.connect()
@@ -718,7 +749,12 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
         if display:
             try:
                 import rerun as rr
-                rr.rerun_shutdown()
+                rr.disconnect()
+            except Exception:
+                pass
+        if _rerun_proc is not None:
+            try:
+                _rerun_proc.terminate()
             except Exception:
                 pass
         teleop.disconnect()
