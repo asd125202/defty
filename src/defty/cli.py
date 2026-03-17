@@ -560,3 +560,60 @@ def hardware_import(source_path: str) -> None:
 
     save_project(yaml_path, project)
     click.echo(f"Imported {added_arms} arm(s) and {added_cams} camera(s) from {source}")
+
+# ── defty upgrade ────────────────────────────────────────────────────────────
+
+
+@main.command()
+def upgrade() -> None:
+    """Upgrade defty to the latest version from GitHub.
+
+    Equivalent to: uv tool install git+https://github.com/asd125202/defty.git --force
+    """
+    import subprocess
+
+    repo_url = "https://github.com/asd125202/defty.git"
+    click.echo(f"Upgrading defty from {repo_url}...")
+
+    uv = _find_uv()
+    if uv is None:
+        click.echo(
+            "Error: 'uv' not found. Install it from https://docs.astral.sh/uv/ then re-run.",
+            err=True,
+        )
+        sys.exit(1)
+
+    result = subprocess.run(
+        [uv, "tool", "install", f"git+{repo_url}", "--force"],
+        check=False,
+    )
+    if result.returncode != 0:
+        click.echo("Upgrade failed. Check the output above.", err=True)
+        sys.exit(result.returncode)
+
+    click.echo("defty upgraded successfully.")
+
+
+@main.command()
+def uninstall() -> None:
+    """Print uninstall instructions for defty."""
+    click.echo("To uninstall defty, run:")
+    click.echo("  uv tool uninstall defty")
+    click.echo("")
+    click.echo("To also remove uv itself:")
+    click.echo("  Linux/macOS:  rm ~/.local/bin/uv ~/.local/bin/uvx")
+    click.echo("  Windows:      Remove-Item $env:USERPROFILE\\.local\\bin\\uv.exe")
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _find_uv() -> str | None:
+    """Find the uv executable path.
+
+    Returns:
+        The path to uv, or None if not found.
+    """
+    import shutil
+
+    return shutil.which("uv")
