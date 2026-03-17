@@ -804,30 +804,316 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
         sys.exit(1)
 
 
+# ── defty datasets ───────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--path", "-p", default=None, hidden=True)
+def datasets(path) -> None:
+    """List all recorded datasets in this project.
+
+    Shows each dataset with its episode count, total frames, FPS, task,
+    and disk size.  Datasets are stored under ``data/`` in the project
+    directory — each ``defty record`` run creates a new numbered dataset.
+    """
+    import json
+
+    yaml_path, _project = _ensure_project(path)
+    data_dir = yaml_path.parent / "data"
+
+    if not data_dir.exists():
+        click.echo("No datasets found. Run 'defty record' to create one.")
+        return
+
+    dirs = sorted(d for d in data_dir.iterdir() if d.is_dir())
+    if not dirs:
+        click.echo("No datasets found. Run 'defty record' to create one.")
+        return
+
+    sep = "─" * 76
+    click.echo(f"\n{'Dataset':<22} {'Episodes':>8} {'Frames':>8} {'FPS':>5} {'Size':>8}  Task")
+    click.echo(sep)
+    for d in dirs:
+        info_path = d / "meta" / "info.json"
+        if not info_path.exists():
+            click.echo(f"  {d.name:<20} (incomplete — no meta/info.json)")
+            continue
+        try:
+            info = json.loads(info_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            click.echo(f"  {d.name:<20} (corrupt metadata)")
+            continue
+
+        episodes = info.get("total_episodes", "?")
+        frames = info.get("total_frames", "?")
+        fps_val = info.get("fps", "?")
+
+        # Size on disk
+        size_bytes = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+        if size_bytes >= 1_073_741_824:
+            size_str = f"{size_bytes / 1_073_741_824:.1f} GB"
+        else:
+            size_str = f"{size_bytes / 1_048_576:.1f} MB"
+
+        # Task from tasks.parquet or fallback
+        task_str = _read_dataset_task(d)
+
+        click.echo(f"  {d.name:<20} {episodes:>8} {frames:>8} {fps_val:>5} {size_str:>8}  {task_str}")
+    click.echo()
+
+
+def _read_dataset_task(dataset_dir: Path) -> str:
+    """Try to read the task description from a dataset's tasks.parquet."""
+    tasks_file = dataset_dir / "meta" / "tasks.parquet"
+    if not tasks_file.exists():
+        return "—"
+    try:
+        import pyarrow.parquet as pq
+        table = pq.read_table(tasks_file)
+        tasks = table.to_pydict().get("task", [])
+        if tasks:
+            return tasks[0] if len(tasks) == 1 else f"{tasks[0]} (+{len(tasks) - 1} more)"
+    except Exception:
+        pass
+    return "—"
+
+
 # ── defty train ──────────────────────────────────────────────────────────────
 
 
 @main.command()
-@click.option("--path", "-p", default=None)
-@click.option("--policy", default="act")
-@click.option("--dataset-name", default=None)
-@click.option("--output-dir", default=None)
-@click.option("--epochs", default=None, type=int)
-@click.option("--batch-size", default=None, type=int)
-@click.option("--lr", default=None, type=float)
-@click.option("--push-to-hub", is_flag=True)
-def train(path, policy, dataset_name, output_dir, epochs, batch_size, lr, push_to_hub) -> None:
-    """Train a policy on recorded data."""
+@click.option("--path", "-p", default=None, hidden=True, help="Path to project.yaml.")
+@click.option(
+    "--policy", default="act", show_default=True,
+    type=click.Choice(["act", "diffusion", "tdmpc", "vqbet"], case_sensitive=False),
+    help="Policy architecture.",
+)
+@click.option("--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted.")
+@click.option("--model-name", default=None, help="Model name for output dir under models/. Auto-generated if omitted.")
+@click.option("--steps", default=None, type=int, help="Total training steps (default: 100000).")
+@click.option("--batch-size", default=None, type=int, help="Training batch size.")
+@click.option("--lr", default=None, type=float, help="Learning rate.")
+@click.option("--push-to-hub", is_flag=True, help="Push trained model to HuggingFace Hub.")
+def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to_hub) -> None:
+    """Train a policy on a recorded dataset.
+
+    Uses LeRobot's training pipeline with ACT, Diffusion, or other policies.
+    Models are saved under ``models/<name>/`` in the project directory.  Each
+    training run gets its own model directory so you can compare experiments.
+
+    Example:
+
+    \b
+        defty train                               # latest dataset, ACT policy
+        defty train --dataset-name test_001        # specific dataset
+        defty train --policy diffusion --steps 50000
+        defty train --model-name my_experiment     # explicit model name
+    """
     from defty.training.trainer import train as do_train
 
-    _ensure_project(path)
+    yaml_path, _project = _ensure_project(path)
+
+    # ── Banner ────────────────────────────────────────────────────────────────
+    ds_label = dataset_name or "(latest)"
+    model_label = model_name or "(auto)"
+    sep = "═" * 55
+    click.echo(f"""
+{sep}
+  defty train
+  Policy   : {policy}
+  Dataset  : {ds_label}
+  Model    : {model_label}
+  Steps    : {steps or 'default (100k)'}
+{sep}
+""")
     try:
-        do_train(project_path=path, policy=policy, dataset_name=dataset_name,
-                 output_dir=output_dir, num_epochs=epochs, batch_size=batch_size,
-                 learning_rate=lr, push_to_hub=push_to_hub)
+        do_train(
+            project_path=path,
+            policy=policy,
+            dataset_name=dataset_name,
+            model_name=model_name,
+            steps=steps,
+            batch_size=batch_size,
+            learning_rate=lr,
+            push_to_hub=push_to_hub,
+        )
     except (FileNotFoundError, RuntimeError) as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+
+
+# ── defty models ─────────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--path", "-p", default=None, hidden=True)
+def models(path) -> None:
+    """List all trained models in this project.
+
+    Shows each model with its policy type, training steps, source dataset,
+    and disk size.  Models are stored under ``models/`` in the project
+    directory.
+    """
+    import json
+
+    yaml_path, _project = _ensure_project(path)
+    models_dir = yaml_path.parent / "models"
+
+    if not models_dir.exists():
+        click.echo("No models found. Run 'defty train' to train one.")
+        return
+
+    dirs = sorted(d for d in models_dir.iterdir() if d.is_dir())
+    if not dirs:
+        click.echo("No models found. Run 'defty train' to train one.")
+        return
+
+    sep = "─" * 70
+    click.echo(f"\n{'Model':<24} {'Policy':>10} {'Steps':>8} {'Size':>8}  Dataset")
+    click.echo(sep)
+    for d in dirs:
+        # Try to read our model info file
+        info_path = d / "defty_model_info.json"
+        policy_str = "?"
+        steps_str = "?"
+        ds_str = "?"
+        if info_path.exists():
+            try:
+                info = json.loads(info_path.read_text(encoding="utf-8"))
+                policy_str = info.get("policy", "?")
+                steps_str = str(info.get("steps", "?"))
+                ds_str = info.get("dataset", "?")
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Fallback: check for lerobot config
+        if policy_str == "?" and (d / "config.json").exists():
+            try:
+                cfg = json.loads((d / "config.json").read_text(encoding="utf-8"))
+                policy_str = cfg.get("type", "?")
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Size on disk
+        size_bytes = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+        if size_bytes >= 1_073_741_824:
+            size_str = f"{size_bytes / 1_073_741_824:.1f} GB"
+        else:
+            size_str = f"{size_bytes / 1_048_576:.1f} MB"
+
+        click.echo(f"  {d.name:<22} {policy_str:>10} {steps_str:>8} {size_str:>8}  {ds_str}")
+    click.echo()
+
+
+# ── defty replay ─────────────────────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--path", "-p", default=None, hidden=True, help="Path to project.yaml.")
+@click.option("--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted.")
+@click.option("--episode", "-e", default=0, type=int, show_default=True, help="Episode index to replay.")
+@click.option("--save", is_flag=True, help="Save replay as .rrd file instead of live viewing.")
+def replay(path, dataset_name, episode, save) -> None:
+    """Replay a recorded dataset episode in Rerun.
+
+    Opens the Rerun viewer and visualises motor positions and camera frames
+    from a previously recorded episode.
+
+    Example:
+
+    \b
+        defty replay                                # latest dataset, episode 0
+        defty replay --dataset-name test_001 -e 3   # specific dataset, episode 3
+        defty replay --save                         # export as .rrd file
+    """
+    import json
+
+    from defty.utils import spawn_rerun_detached
+
+    yaml_path, _project = _ensure_project(path)
+    data_dir = yaml_path.parent / "data"
+
+    if not data_dir.exists():
+        click.echo("Error: No datasets found. Run 'defty record' first.", err=True)
+        sys.exit(1)
+
+    # Resolve dataset name
+    if dataset_name is None:
+        from defty.recording.recorder import _latest_dataset
+        dataset_name = _latest_dataset(data_dir)
+        if dataset_name is None:
+            click.echo("Error: No valid datasets found. Run 'defty record' first.", err=True)
+            sys.exit(1)
+
+    dataset_root = data_dir / dataset_name
+    if not dataset_root.exists():
+        click.echo(f"Error: Dataset '{dataset_name}' not found in {data_dir}", err=True)
+        sys.exit(1)
+
+    meta_file = dataset_root / "meta" / "info.json"
+    if not meta_file.exists():
+        click.echo(f"Error: Dataset '{dataset_name}' is incomplete (no meta/info.json).", err=True)
+        sys.exit(1)
+
+    info = json.loads(meta_file.read_text(encoding="utf-8"))
+    total_episodes = info.get("total_episodes", 0)
+    if episode >= total_episodes:
+        click.echo(
+            f"Error: Episode {episode} does not exist. "
+            f"Dataset '{dataset_name}' has {total_episodes} episode(s) (0–{total_episodes - 1}).",
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(f"Replaying episode {episode} from dataset '{dataset_name}' ...")
+
+    try:
+        from lerobot.datasets.lerobot_dataset import LeRobotDataset
+        from lerobot.scripts.lerobot_dataset_viz import visualize_dataset
+    except ImportError as exc:
+        click.echo(f"Error: LeRobot not available: {exc}", err=True)
+        sys.exit(1)
+
+    repo_id = f"local/{dataset_name}"
+
+    try:
+        dataset = LeRobotDataset(repo_id, root=str(dataset_root), episodes=[episode])
+    except Exception as exc:
+        click.echo(f"Error loading dataset: {exc}", err=True)
+        sys.exit(1)
+
+    output_dir = None
+    if save:
+        output_dir = yaml_path.parent / "replays"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        click.echo(f"Saving replay to {output_dir}/")
+
+    # Spawn detached Rerun viewer for live mode
+    rerun_proc = None
+    if not save:
+        rerun_proc = spawn_rerun_detached()
+        if rerun_proc is None:
+            click.echo("Warning: Could not spawn Rerun viewer. Trying local mode...", err=True)
+
+    try:
+        visualize_dataset(
+            dataset,
+            episode_index=episode,
+            mode="local",
+            save=save,
+            output_dir=output_dir,
+        )
+        if save and output_dir:
+            click.echo(f"✓ Replay saved to {output_dir}/")
+    except Exception as exc:
+        click.echo(f"Error during replay: {exc}", err=True)
+        sys.exit(1)
+    finally:
+        if rerun_proc is not None:
+            try:
+                rerun_proc.terminate()
+            except Exception:
+                pass
 
 
 # ── defty hardware import ────────────────────────────────────────────────────
