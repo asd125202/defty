@@ -209,6 +209,17 @@ def train(
 
     try:
         lerobot_train(cfg)
+    except OSError as exc:
+        # Windows symlink error (WinError 1314) — training completed but
+        # lerobot failed to create a "last" checkpoint symlink.  Not fatal.
+        if "1314" in str(exc) or "privilege" in str(exc).lower():
+            logger.warning(
+                "Training completed but checkpoint symlink failed "
+                "(Windows admin privileges required for symlinks). "
+                "This does not affect the trained model."
+            )
+        else:
+            raise
     except TypeError:
         logger.error(
             "LeRobot train API signature may have changed. "

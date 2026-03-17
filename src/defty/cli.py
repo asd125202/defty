@@ -994,6 +994,31 @@ def models(path) -> None:
             except (json.JSONDecodeError, OSError):
                 pass
 
+        # Fallback: check lerobot's train_config.json in checkpoint dirs
+        if policy_str == "?":
+            for tc_path in d.glob("checkpoints/*/pretrained_model/train_config.json"):
+                try:
+                    tc = json.loads(tc_path.read_text(encoding="utf-8"))
+                    policy_str = tc.get("policy", {}).get("type", policy_str)
+                    steps_str = str(tc.get("steps", steps_str))
+                    ds_str = tc.get("dataset", {}).get("repo_id", ds_str)
+                    if ds_str != "?" and "/" in ds_str:
+                        ds_str = ds_str.split("/", 1)[1]  # strip "local/"
+                except (json.JSONDecodeError, OSError):
+                    pass
+                break  # use first found
+
+        # Fallback: scan for checkpoints to infer steps
+        if steps_str == "?":
+            ckpt_dir = d / "checkpoints"
+            if ckpt_dir.exists():
+                ckpts = sorted(
+                    (p.name for p in ckpt_dir.iterdir() if p.is_dir() and p.name.isdigit()),
+                    key=int,
+                )
+                if ckpts:
+                    steps_str = ckpts[-1]
+
         # Size on disk
         size_bytes = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
         if size_bytes >= 1_073_741_824:
