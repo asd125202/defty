@@ -6,8 +6,9 @@
 # What this does:
 #   1. Installs uv (the fast Python package manager)
 #   2. Installs Python 3.12 via uv
-#   3. Installs the `defty` CLI tool via uv
-#   4. Adds defty to your PATH
+#   3. Detects your GPU (NVIDIA → CUDA torch; no GPU → CPU torch)
+#   4. Installs the `defty` CLI with the right torch wheel
+#   5. Adds defty to your PATH
 
 $ErrorActionPreference = "Stop"
 
@@ -29,6 +30,23 @@ if ($arch -notin @("AMD64", "ARM64")) {
     Write-Fail "Unsupported architecture: $arch"
 }
 Write-Info "Detected: Windows ($arch)"
+
+# ── Detect NVIDIA GPU ────────────────────────────────────────────────────────
+$hasNvidia = $false
+$gpuName   = ""
+try {
+    $nvsmi = Get-Command nvidia-smi -ErrorAction Stop
+    $gpuName = (nvidia-smi --query-gpu=name --format=csv,noheader 2>$null | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -eq 0 -and $gpuName) {
+        $hasNvidia = $true
+    }
+} catch {}
+
+if ($hasNvidia) {
+    Write-Info "GPU detected: $gpuName  →  will install CUDA-enabled torch"
+} else {
+    Write-Info "No NVIDIA GPU detected  →  will install CPU-only torch"
+}
 
 # ── Step 1: Install uv ───────────────────────────────────────────────────────
 Write-Info "Step 1/3 - Installing uv (Python package manager)..."
@@ -61,9 +79,14 @@ Write-Info "Step 2/3 - Installing Python $PYTHON_VER via uv..."
 uv python install $PYTHON_VER
 Write-Success "Python $PYTHON_VER ready."
 
-# ── Step 3: Install defty ─────────────────────────────────────────────────────
-Write-Info "Step 3/3 - Installing defty CLI..."
-uv tool install "git+$DEFTY_REPO" --python $PYTHON_VER --force
+# ── Step 3: Install defty (GPU-aware) ────────────────────────────────────────
+if ($hasNvidia) {
+    Write-Info "Step 3/3 - Installing defty with CUDA support ($gpuName)..."
+    uv tool install "defty[cuda] @ git+$DEFTY_REPO" --python $PYTHON_VER --force
+} else {
+    Write-Info "Step 3/3 - Installing defty (CPU)..."
+    uv tool install "git+$DEFTY_REPO" --python $PYTHON_VER --force
+}
 Write-Success "defty installed."
 
 # ── PATH setup ────────────────────────────────────────────────────────────────
@@ -87,6 +110,9 @@ $deftyCmd = Get-Command defty -ErrorAction SilentlyContinue
 if ($deftyCmd) {
     $deftyVer = defty --version 2>&1
     Write-Success "Installation complete!  $deftyVer"
+    if ($hasNvidia) {
+        Write-Success "CUDA training enabled on: $gpuName"
+    }
     Write-Host ""
     Write-Host "  Quick start:" -ForegroundColor White
     Write-Host "    mkdir my-robot; cd my-robot"

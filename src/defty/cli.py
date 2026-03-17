@@ -1175,6 +1175,13 @@ def upgrade() -> None:
         click.echo("Error: 'uv' not found. Install: https://docs.astral.sh/uv/", err=True)
         sys.exit(1)
 
+    # Detect GPU to preserve the right torch wheel on upgrade
+    import torch as _torch
+    _has_cuda = _torch.cuda.is_available()
+    _install_spec = f"defty[cuda] @ git+{repo_url}" if _has_cuda else f"git+{repo_url}"
+    if _has_cuda:
+        click.echo("NVIDIA GPU detected — upgrading with CUDA torch.")
+
     if sys.platform == "win32":
         # On Windows the running defty.exe locks its own Scripts\ directory, so
         # uv cannot overwrite it while this process is alive.  Workaround:
@@ -1193,7 +1200,7 @@ def upgrade() -> None:
             f'tasklist /FI "PID eq {pid}" 2>nul | find /I "{pid}" >nul',
             "if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)",
             f"echo Upgrading defty from {repo_url}...",
-            f'"{uv}" tool install git+{repo_url} --force',
+            f'"{uv}" tool install {_install_spec} --force',
             "if errorlevel 1 (echo. & echo Upgrade FAILED. & pause) else (echo. & echo defty upgraded successfully. & timeout /t 3)",
         ]
         bat_path = Path(tempfile.gettempdir()) / "defty_upgrade.bat"
@@ -1209,7 +1216,7 @@ def upgrade() -> None:
 
     # Linux / macOS: no file-locking issue, run directly.
     click.echo(f"Upgrading defty from {repo_url}...")
-    result = subprocess.run([uv, "tool", "install", f"git+{repo_url}", "--force"], check=False)
+    result = subprocess.run([uv, "tool", "install", _install_spec, "--force"], check=False)
     if result.returncode != 0:
         click.echo("Upgrade failed. Check the output above.", err=True)
         sys.exit(result.returncode)

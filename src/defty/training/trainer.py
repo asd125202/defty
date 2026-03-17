@@ -167,8 +167,19 @@ def train(
         }
         policy_cls = policy_map.get(policy.lower())
         if policy_cls is not None:
+            import torch as _torch
             policy_inst = policy_cls()
             policy_inst.push_to_hub = False  # ACTConfig defaults push_to_hub=True
+            # Auto-select best available device; installer sets up the right torch wheel
+            # but guard here too in case of manual installs
+            if hasattr(policy_inst, "device"):
+                if _torch.cuda.is_available():
+                    policy_inst.device = "cuda"
+                elif getattr(_torch.backends, "mps", None) and _torch.backends.mps.is_available():
+                    policy_inst.device = "mps"
+                else:
+                    policy_inst.device = "cpu"
+                logger.info("Training device: %s", policy_inst.device)
             cfg.policy = policy_inst
         else:
             raise RuntimeError(f"Unknown policy: {policy}")
