@@ -159,13 +159,14 @@ def run(
 
     # ── Resolve hardware from project.yaml ───────────────────────────────
     hw = project.get("hardware", {})
-    followers = hw.get("followers", [])
+    arms = hw.get("arms", [])
+    followers = [a for a in arms if a.get("role") == "follower"]
     cameras = hw.get("cameras", [])
     record_fps = fps or int(project.get("recording", {}).get("fps", 30))
 
     if not followers:
         raise RuntimeError(
-            "No followers defined in project.yaml. "
+            "No follower arms defined in project.yaml. "
             "Run 'defty scan ports' and 'defty calibrate' first."
         )
 
