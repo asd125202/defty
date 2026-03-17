@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Defty command-line interface.
+"""Defty command-line interface.
 
 All commands are strictly non-interactive — every parameter is passed
 via flags.  The only exception is `defty setup calibrate` which
 requires the user to physically move the robot arm.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ __all__ = ["main"]
 @click.version_option(__version__, prog_name="defty")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
 def main(verbose: bool) -> None:
-    """"""Defty — Physical AI IDE for robot intelligence development.""""""
+    """Defty — Physical AI IDE for robot intelligence development."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -59,7 +59,7 @@ def main(verbose: bool) -> None:
 @click.option("--name", "-n", default=None, help="Project name (defaults to dir name).")
 @click.option("--description", "-d", default="", help="Project description.")
 def init(directory: str, name: str | None, description: str) -> None:
-    """"""Initialise a new Defty project.""""""
+    """Initialise a new Defty project."""
     from defty.project import init_project
 
     try:
@@ -76,7 +76,7 @@ def init(directory: str, name: str | None, description: str) -> None:
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
 def status(path: str | None) -> None:
-    """"""Show current project status.""""""
+    """Show current project status."""
     from defty.platform import detect_os
     from defty.project import load_project
 
@@ -107,12 +107,12 @@ def status(path: str | None) -> None:
 
 @main.group()
 def scan() -> None:
-    """"""Scan for connected hardware.""""""
+    """Scan for connected hardware."""
 
 
 @scan.command("ports")
 def scan_ports() -> None:
-    """"""List all connected serial ports with fingerprint data.""""""
+    """List all connected serial ports with fingerprint data."""
     from defty.hardware.detector import list_serial_ports
 
     ports = list_serial_ports()
@@ -130,7 +130,7 @@ def scan_ports() -> None:
 
 @scan.command("cameras")
 def scan_cameras() -> None:
-    """"""List all connected cameras with fingerprint data.""""""
+    """List all connected cameras with fingerprint data."""
     from defty.hardware.detector import list_cameras
 
     cameras = list_cameras()
@@ -149,7 +149,7 @@ def scan_cameras() -> None:
 
 @main.group()
 def setup() -> None:
-    """"""Add, configure, or calibrate hardware.""""""
+    """Add, configure, or calibrate hardware."""
 
 
 @setup.command("add-arm")
@@ -167,7 +167,7 @@ def setup_add_arm(
     label: str,
     hardware_id: str,
 ) -> None:
-    """"""Register a new robot arm in the project.""""""
+    """Register a new robot arm in the project."""
     from defty.hardware.detector import list_serial_ports
     from defty.hardware.registry import add_arm
     from defty.project import find_project_root, load_project, save_project
@@ -223,7 +223,7 @@ def setup_add_camera(
     height: int,
     fps: float,
 ) -> None:
-    """"""Register a new camera in the project.""""""
+    """Register a new camera in the project."""
     from defty.hardware.detector import list_cameras
     from defty.hardware.fingerprint import resolve_camera_hardware_id
     from defty.hardware.registry import add_camera
@@ -266,7 +266,7 @@ def setup_add_camera(
 @setup.command("calibrate")
 @click.option("--arm-id", required=True, help="ID of the arm to calibrate.")
 def setup_calibrate(arm_id: str) -> None:
-    """"""Calibrate a robot arm (interactive — requires physical arm movement).""""""
+    """Calibrate a robot arm (interactive — requires physical arm movement)."""
     from defty.project import find_project_root, load_project, save_project
 
     try:
@@ -331,7 +331,7 @@ def setup_calibrate(arm_id: str) -> None:
 
 @setup.command("update")
 def setup_update() -> None:
-    """"""Re-scan hardware and update port assignments using fingerprints.""""""
+    """Re-scan hardware and update port assignments using fingerprints."""
     from defty.hardware.registry import update_ports
     from defty.project import find_project_root, load_project, save_project
 
@@ -350,7 +350,7 @@ def setup_update() -> None:
 @setup.command("remove-arm")
 @click.option("--arm-id", required=True, help="ID of the arm to remove.")
 def setup_remove_arm(arm_id: str) -> None:
-    """"""Remove a registered arm from the project.""""""
+    """Remove a registered arm from the project."""
     from defty.hardware.registry import remove_arm
     from defty.project import find_project_root, load_project, save_project
 
@@ -368,7 +368,7 @@ def setup_remove_arm(arm_id: str) -> None:
 @setup.command("remove-camera")
 @click.option("--camera-id", required=True, help="ID of the camera to remove.")
 def setup_remove_camera(camera_id: str) -> None:
-    """"""Remove a registered camera from the project.""""""
+    """Remove a registered camera from the project."""
     from defty.hardware.registry import remove_camera
     from defty.project import find_project_root, load_project, save_project
 
@@ -389,7 +389,7 @@ def setup_remove_camera(camera_id: str) -> None:
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
 def health(path: str | None) -> None:
-    """"""Check the health of all registered hardware.""""""
+    """Check the health of all registered hardware."""
     from defty.hardware.health import check_all_health
     from defty.project import load_project
 
@@ -444,7 +444,7 @@ def record(
     dataset_name: str | None,
     push_to_hub: bool,
 ) -> None:
-    """"""Record teleoperation episodes.""""""
+    """Record teleoperation episodes."""
     from defty.recording.recorder import record as do_record
 
     try:
@@ -482,7 +482,7 @@ def train(
     lr: float | None,
     push_to_hub: bool,
 ) -> None:
-    """"""Train a policy on recorded data.""""""
+    """Train a policy on recorded data."""
     from defty.training.trainer import train as do_train
 
     try:
@@ -506,13 +506,13 @@ def train(
 
 @main.group()
 def hardware() -> None:
-    """"""Hardware data management.""""""
+    """Hardware data management."""
 
 
 @hardware.command("import")
 @click.argument("source_path", type=click.Path(exists=True))
 def hardware_import(source_path: str) -> None:
-    """"""Import hardware configuration from another project or file.""""""
+    """Import hardware configuration from another project or file."""
     import yaml
 
     from defty.project import find_project_root, load_project, save_project
