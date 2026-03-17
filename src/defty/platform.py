@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Cross-platform utilities for Defty.
+"""Cross-platform utilities for Defty.
 
 Provides OS detection and platform-specific helpers that are used
 throughout the Defty codebase to ensure consistent behavior on
 Linux, macOS, and Windows.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ __all__ = ["OSType", "detect_os", "get_serial_glob_patterns"]
 
 
 class OSType(Enum):
-    """"""Supported operating systems.""""""
+    """Supported operating systems."""
 
     LINUX = "linux"
     MACOS = "macos"
@@ -40,14 +40,14 @@ class OSType(Enum):
 
 
 def detect_os() -> OSType:
-    """"""Detect the current operating system.
+    """Detect the current operating system.
 
     Returns:
         OSType: The detected operating system.
 
     Raises:
         RuntimeError: If the operating system is not supported.
-    """"""
+    """
     system = platform.system().lower()
     if system == "linux":
         return OSType.LINUX
@@ -60,14 +60,14 @@ def detect_os() -> OSType:
 
 
 def get_serial_glob_patterns(os_type: OSType | None = None) -> list[str]:
-    """"""Return glob patterns for serial ports on the current platform.
+    """Return glob patterns for serial ports on the current platform.
 
     Args:
         os_type: Override the OS type. If None, detects automatically.
 
     Returns:
         A list of glob patterns that match serial port device files.
-    """"""
+    """
     if os_type is None:
         os_type = detect_os()
 
