@@ -110,9 +110,14 @@ def train(
             "Run 'defty datasets' to see available datasets."
         )
 
-    # Resolve model output directory
+    # Resolve model output directory — auto-increment until we find a free slot
+    # (lerobot raises FileExistsError if output_dir already exists and resume=False)
     if model_name is None:
         model_name = _auto_model_name(models_dir, f"{policy}_{dataset_name}")
+    else:
+        # Explicit name: still check and increment if already taken
+        if (models_dir / model_name).exists():
+            model_name = _auto_model_name(models_dir, model_name)
     model_output = models_dir / model_name
 
     repo_id = f"local/{dataset_name}"
@@ -139,9 +144,8 @@ def train(
     train_kwargs: dict[str, Any] = {
         "dataset": dataset_cfg,
         "output_dir": model_output,
+        "steps": steps if steps is not None else 10_000,  # default 10k (lerobot default is 100k)
     }
-    if steps is not None:
-        train_kwargs["steps"] = steps
     if batch_size is not None:
         train_kwargs["batch_size"] = batch_size
 
@@ -181,19 +185,14 @@ def train(
     if push_to_hub:
         cfg.policy.push_to_hub = True
 
-    # Write defty model metadata before training starts
-    model_output.mkdir(parents=True, exist_ok=True)
     meta = {
         "policy": policy,
         "dataset": dataset_name,
-        "steps": steps or 100_000,
+        "steps": steps or 10_000,
         "batch_size": batch_size,
         "learning_rate": learning_rate,
         "project": proj_name,
     }
-    (model_output / "defty_model_info.json").write_text(
-        json.dumps(meta, indent=2), encoding="utf-8"
-    )
 
     try:
         lerobot_train(cfg)
@@ -203,5 +202,13 @@ def train(
             "Please check LeRobot compatibility."
         )
         raise
+
+    # Write defty metadata AFTER training so lerobot's dir-existence check passes
+    try:
+        (model_output / "defty_model_info.json").write_text(
+            json.dumps(meta, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.warning("Could not write defty_model_info.json: %s", exc)
 
     logger.info("Training complete. Model saved to: %s", model_output)

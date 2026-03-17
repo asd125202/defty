@@ -923,7 +923,7 @@ def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to
   Policy   : {policy}
   Dataset  : {ds_label}
   Model    : {model_label}
-  Steps    : {steps or 'default (100k)'}
+  Steps    : {steps or 'default (10k)'}
 {sep}
 """)
     try:

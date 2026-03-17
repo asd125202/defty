@@ -277,7 +277,7 @@ defty train --policy act                 # act (default), diffusion, tdmpc, vqbe
 defty train --policy diffusion
 
 # Training hyperparameters
-defty train --steps 100000               # total training steps (default: 100k)
+defty train --steps 100000               # total training steps (default: 10k)
 defty train --batch-size 32
 defty train --lr 1e-4
 
