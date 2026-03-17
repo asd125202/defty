@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Defty hardware management — detection, registration, and health checks.""""""
+"""Defty hardware management — detection, registration, and health checks."""
 
 from defty.hardware.detector import list_cameras, list_serial_ports
 from defty.hardware.fingerprint import resolve_hardware_id, resolve_hardware_info
