@@ -56,6 +56,41 @@ issues = "https://github.com/asd125202/defty/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# ── uv configuration ──────────────────────────────────────────────────────────
+# uv selects the correct torch wheel based on the platform:
+#   - NVIDIA GPU  → torch with CUDA (cu121 or cu124)
+#   - Apple Silicon → torch with MPS (standard PyPI wheel works)
+#   - CPU-only    → lightweight torch+cpu wheel
+#
+# Users with NVIDIA GPUs should run:
+#   uv sync --extra cuda
+#
+# uv index docs: https://docs.astral.sh/uv/guides/package-indexes/
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+# Default: CPU wheel (works everywhere, used during `uv tool install`)
+# Override in uv.toml or pass --extra cuda for GPU training
+torch = [
+    { index = "pytorch-cu124", marker = "extra == 'cuda'" },
+    { index = "pytorch-cpu",   marker = "extra != 'cuda'" },
+]
+
+# ── Ruff ─────────────────────────────────────────────────────────────────────
 [tool.ruff]
 target-version = "py312"
 line-length = 110
