@@ -1175,12 +1175,18 @@ def upgrade() -> None:
         click.echo("Error: 'uv' not found. Install: https://docs.astral.sh/uv/", err=True)
         sys.exit(1)
 
-    # Detect GPU to preserve the right torch wheel on upgrade
-    import torch as _torch
-    _has_cuda = _torch.cuda.is_available()
-    _install_spec = f"defty[cuda] @ git+{repo_url}" if _has_cuda else f"git+{repo_url}"
-    if _has_cuda:
+    # Detect NVIDIA GPU via nvidia-smi (NOT torch.cuda — that returns False
+    # when the CPU-only wheel is installed, creating a chicken-and-egg problem)
+    _has_nvidia = _detect_nvidia_gpu()
+    _install_spec = f'"defty[cuda] @ git+{repo_url}"' if _has_nvidia else f"git+{repo_url}"
+    if _has_nvidia:
         click.echo("NVIDIA GPU detected — upgrading with CUDA torch.")
+
+    # Build the install spec string
+    if _has_nvidia:
+        _pkg_spec = f"defty[cuda] @ git+{repo_url}"
+    else:
+        _pkg_spec = f"git+{repo_url}"
 
     if sys.platform == "win32":
         # On Windows the running defty.exe locks its own Scripts\ directory, so
@@ -1193,6 +1199,8 @@ def upgrade() -> None:
         import tempfile
 
         pid = os.getpid()
+        # Quote the spec for the batch file (handles the [cuda] brackets)
+        bat_spec = f'"{_pkg_spec}"' if "[" in _pkg_spec else _pkg_spec
         bat_lines = [
             "@echo off",
             f"echo Waiting for defty to exit (PID {pid})...",
@@ -1200,7 +1208,7 @@ def upgrade() -> None:
             f'tasklist /FI "PID eq {pid}" 2>nul | find /I "{pid}" >nul',
             "if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)",
             f"echo Upgrading defty from {repo_url}...",
-            f'"{uv}" tool install {_install_spec} --force',
+            f'"{uv}" tool install {bat_spec} --force',
             "if errorlevel 1 (echo. & echo Upgrade FAILED. & pause) else (echo. & echo defty upgraded successfully. & timeout /t 3)",
         ]
         bat_path = Path(tempfile.gettempdir()) / "defty_upgrade.bat"
@@ -1216,7 +1224,7 @@ def upgrade() -> None:
 
     # Linux / macOS: no file-locking issue, run directly.
     click.echo(f"Upgrading defty from {repo_url}...")
-    result = subprocess.run([uv, "tool", "install", _install_spec, "--force"], check=False)
+    result = subprocess.run([uv, "tool", "install", _pkg_spec, "--force"], check=False)
     if result.returncode != 0:
         click.echo("Upgrade failed. Check the output above.", err=True)
         sys.exit(result.returncode)
@@ -1240,3 +1248,22 @@ def uninstall() -> None:
 def _find_uv() -> str | None:
     """Find the uv executable path."""
     return shutil.which("uv")
+
+
+def _detect_nvidia_gpu() -> bool:
+    """Detect NVIDIA GPU via nvidia-smi (works even with CPU-only torch)."""
+    nvsmi = shutil.which("nvidia-smi")
+    if not nvsmi:
+        return False
+    try:
+        result = subprocess.run(
+            [nvsmi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5,
+        )
+        name = (result.stdout or "").strip()
+        if result.returncode == 0 and name:
+            click.echo(f"  GPU: {name}")
+            return True
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return False
