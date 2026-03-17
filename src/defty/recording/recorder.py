@@ -46,6 +46,7 @@ def record(
     episode_time_s: float = 60,
     reset_time_s: float = 60,
     display: bool = False,
+    resume: bool = False,
 ) -> None:
     """Record teleoperation episodes using LeRobot.
 
@@ -64,6 +65,7 @@ def record(
         episode_time_s: Seconds of recording per episode.
         reset_time_s: Seconds to reset the environment between episodes.
         display: Show camera feeds and motor values via Rerun.
+        resume: Append to an existing dataset instead of creating a new one.
 
     Raises:
         FileNotFoundError: If no ``project.yaml`` can be found.
@@ -99,6 +101,12 @@ def record(
     # lerobot requires repo_id in "namespace/name" format even for local datasets
     if "/" not in ds_name:
         ds_name = f"local/{ds_name}"
+
+    # Each dataset lives in its own subdirectory: data/<local_name>/
+    # This avoids FileExistsError when the parent data/ dir already exists.
+    local_name = ds_name.split("/")[-1]
+    dataset_root = str(yaml_path.parent / "data" / local_name)
+
     task_desc = task or "Task recorded with Defty"
 
     calibration_dir = yaml_path.parent / "calibration"
@@ -149,7 +157,7 @@ def record(
     dataset_cfg = DatasetRecordConfig(
         repo_id=ds_name,
         single_task=task_desc,
-        root=str(yaml_path.parent / "data"),
+        root=dataset_root,
         fps=record_fps,
         num_episodes=num_episodes,
         push_to_hub=push_to_hub,
@@ -179,6 +187,7 @@ def record(
         display_data=display,
         display_ip=display_ip,
         display_port=display_port,
+        resume=resume,
         play_sounds=False,  # disable: requires PowerShell on Windows (blocked by execution policy)
     )
 

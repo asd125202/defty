@@ -744,16 +744,19 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 @click.option("--reset-time", default=60.0, type=float, show_default=True, help="Seconds to reset between episodes.")
 @click.option("--display", is_flag=True, help="Show camera feeds via Rerun.")
 @click.option("--push-to-hub", is_flag=True, help="Push dataset to HuggingFace Hub.")
-def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, display, push_to_hub) -> None:
+@click.option("--resume", is_flag=True, help="Append episodes to an existing dataset instead of creating a new one.")
+def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, display, push_to_hub, resume) -> None:
     """Record teleoperation episodes.
 
     Uses the leader arm to control the follower arm and records the
-    resulting trajectories as a LeRobot dataset.
+    resulting trajectories as a LeRobot dataset.  Each dataset is stored
+    under ``data/<name>/`` inside the project directory.
 
     Example:
 
     \b
         defty record --episodes 20 --task "Pick the red cube"
+        defty record --resume --episodes 10 --task "Pick the red cube"   # add to existing
 
     \b
     Keyboard controls during recording:
@@ -778,6 +781,7 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
             reset_time_s=reset_time,
             display=display,
             push_to_hub=push_to_hub,
+            resume=resume,
         )
     except (FileNotFoundError, RuntimeError) as exc:
         click.echo(f"Error: {exc}", err=True)
