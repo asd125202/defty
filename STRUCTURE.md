@@ -1,44 +1,44 @@
-# Repository Structure
+# Defty — Repository Structure
 
 ```
 defty/
-├── spec/                        # Open format specification docs
-│   ├── project-yaml.md          # project.yaml schema (v0.x)
-│   └── skill-format.md          # .skill file format (v0.x)
+├── LICENSE                          # Apache 2.0
+├── README.md                        # Project overview
+├── CONTRIBUTING.md                  # Coding standards & PR checklist
+├── CHANGELOG.md                     # Keep-a-changelog format
+├── STRUCTURE.md                     # This file
+├── pyproject.toml                   # Package definition, deps, ruff config
+│
 ├── src/
-│   └── defty/                   # Core Python library (pip install defty)
-│       ├── __init__.py
-│       ├── project.py           # Project create / load / validate
-│       ├── hardware/            # Hardware drivers
-│       │   ├── __init__.py
-│       │   └── so100.py         # SO-100 robot arm driver
-│       ├── recording/           # Data recording
-│       │   ├── __init__.py
-│       │   └── recorder.py
-│       ├── training/            # Policy training
-│       │   ├── __init__.py
-│       │   └── trainer.py
-│       ├── execution/           # Skill execution engine
-│       │   ├── __init__.py
-│       │   └── runner.py
-│       ├── skill/               # Skill pack / install / parse
-│       │   ├── __init__.py
-│       │   ├── packer.py
-│       │   ├── installer.py
-│       │   └── skill_file.py
-│       └── doctor.py            # Environment diagnostics
-├── cli/                         # CLI (calls core)
-│   └── src/defty_cli/
-│       └── cli.py
-├── skills/                      # Example Skills
-├── docs/
-│   ├── robots/                  # Per-robot doc pages
-│   └── api/                     # API reference
+│   └── defty/
+│       ├── __init__.py              # Package root, re-exports __version__
+│       ├── __version__.py           # Single-source version string
+│       ├── cli.py                   # Click CLI — all `defty` commands
+│       ├── platform.py              # OS detection (Linux/macOS/Windows)
+│       ├── project.py               # project.yaml CRUD (init/load/save)
+│       │
+│       ├── hardware/
+│       │   ├── __init__.py          # Re-exports from submodules
+│       │   ├── detector.py          # Serial port & camera scanning
+│       │   ├── fingerprint.py       # Cross-platform hardware fingerprinting
+│       │   ├── health.py            # Per-motor ping, camera connectivity
+│       │   └── registry.py          # Add/remove/update arms & cameras
+│       │
+│       ├── recording/
+│       │   ├── __init__.py          # Re-exports record()
+│       │   └── recorder.py          # Wrap LeRobot recording pipeline
+│       │
+│       └── training/
+│           ├── __init__.py          # Re-exports train()
+│           └── trainer.py           # Wrap LeRobot training pipeline
+│
 ├── tests/
-├── install.sh                   # macOS/Linux one-liner installer
-├── install.ps1                  # Windows one-liner installer
-├── pyproject.toml
-├── CONTRIBUTING.md
-├── CHANGELOG.md
-└── STRUCTURE.md                 # this file
+│   ├── __init__.py
+│   ├── test_platform.py             # OS detection tests
+│   ├── test_project.py              # project.yaml CRUD tests
+│   └── test_registry.py             # Hardware registry tests
+│
+└── spec/
+    ├── project-yaml.md              # project.yaml schema v0.1
+    └── skill-format.md              # .skill file format v0.1
 ```
