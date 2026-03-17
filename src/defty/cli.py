@@ -351,6 +351,8 @@ def setup_add_camera(device, position, camera_id, hardware_id, width, height, fp
 @click.option("--path", "-p", default=None, hidden=True)
 def setup_calibrate(arm_id, path) -> None:
     """Calibrate a robot arm (interactive -- requires physical arm movement)."""
+    import json
+
     from defty.project import save_project
 
     yaml_path, project = _ensure_project(path)
@@ -369,27 +371,38 @@ def setup_calibrate(arm_id, path) -> None:
         click.echo(f"Error: Arm '{arm_id}' has no port. Run 'defty setup update' first.", err=True)
         sys.exit(1)
 
+    # Calibration files are stored alongside project.yaml under calibration/
+    calibration_dir = yaml_path.parent / "calibration"
+    calibration_dir.mkdir(exist_ok=True)
+
     click.echo(f"Calibrating '{arm_id}' ({robot_type} {role}) on {port}...")
     click.echo("Follow the prompts to physically move the arm.")
 
     try:
-        if robot_type == "so101" and role == "follower":
-            from lerobot.robots.so_follower import SOFollower, SOFollowerConfig
-            robot = SOFollower(SOFollowerConfig(port=port))
+        if robot_type in ("so101", "so100") and role == "follower":
+            from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
+            robot = SOFollower(SOFollowerRobotConfig(
+                port=port, id=arm_id, calibration_dir=calibration_dir,
+            ))
             robot.connect(calibrate=False)
             robot.calibrate()
-            arm["calibration"] = robot.calibration
             robot.disconnect()
-        elif robot_type == "so101" and role == "leader":
-            from lerobot.teleoperators.so100 import SO100Leader, SO100LeaderConfig
-            leader = SO100Leader(SO100LeaderConfig(port=port))
+        elif robot_type in ("so101", "so100") and role == "leader":
+            from lerobot.teleoperators.so_leader import SOLeader, SOLeaderTeleopConfig
+            leader = SOLeader(SOLeaderTeleopConfig(
+                port=port, id=arm_id, calibration_dir=calibration_dir,
+            ))
             leader.connect(calibrate=False)
             leader.calibrate()
-            arm["calibration"] = leader.calibration
             leader.disconnect()
         else:
             click.echo(f"Error: Calibration not implemented for {robot_type} {role}", err=True)
             sys.exit(1)
+
+        # Load the JSON calibration file LeRobot saved and store a reference in project.yaml
+        cal_file = calibration_dir / f"{arm_id}.json"
+        if cal_file.exists():
+            arm["calibration"] = json.loads(cal_file.read_text(encoding="utf-8"))
 
         save_project(yaml_path, project)
         click.echo(f"Calibration saved for '{arm_id}'.")
