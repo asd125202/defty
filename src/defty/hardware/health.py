@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Hardware health checks — motor-level ping and camera connectivity.
+"""Hardware health checks — motor-level ping and camera connectivity.
 
 Provides non-interactive health diagnostics for arms and cameras.
 Used by `defty health` to verify that every registered device is
 reachable and functioning.
-""""""
+"""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ __all__ = [
 
 @dataclass
 class MotorStatus:
-    """"""Health status of a single motor.""""""
+    """Health status of a single motor."""
 
     motor_id: int
     name: str
@@ -50,7 +50,7 @@ class MotorStatus:
 
 @dataclass
 class ArmHealthReport:
-    """"""Health report for a single robot arm.""""""
+    """Health report for a single robot arm."""
 
     arm_id: str
     port: str
@@ -60,13 +60,13 @@ class ArmHealthReport:
 
     @property
     def all_motors_ok(self) -> bool:
-        """"""True if every motor is online.""""""
+        """True if every motor is online."""
         return self.reachable and all(m.online for m in self.motors)
 
 
 @dataclass
 class CameraHealthReport:
-    """"""Health report for a single camera.""""""
+    """Health report for a single camera."""
 
     camera_id: str
     device: str
@@ -76,14 +76,14 @@ class CameraHealthReport:
 
 @dataclass
 class HealthReport:
-    """"""Aggregate health report for all hardware.""""""
+    """Aggregate health report for all hardware."""
 
     arms: list[ArmHealthReport] = field(default_factory=list)
     cameras: list[CameraHealthReport] = field(default_factory=list)
 
     @property
     def all_ok(self) -> bool:
-        """"""True if every device passes health check.""""""
+        """True if every device passes health check."""
         arms_ok = all(a.all_motors_ok for a in self.arms)
         cams_ok = all(c.online for c in self.cameras)
         return arms_ok and cams_ok
@@ -102,7 +102,7 @@ SO101_MOTOR_NAMES: dict[int, str] = {
 
 
 def check_arm_health(arm_config: dict[str, Any]) -> ArmHealthReport:
-    """"""Ping every motor on a robot arm and report status.
+    """Ping every motor on a robot arm and report status.
 
     Opens the serial port, sends a broadcast ping via the Feetech
     protocol (through LeRobot's `FeetechMotorsBus`), and checks that
@@ -114,7 +114,7 @@ def check_arm_health(arm_config: dict[str, Any]) -> ArmHealthReport:
 
     Returns:
         An `ArmHealthReport` with per-motor status.
-    """"""
+    """
     arm_id = arm_config.get("id", "unknown")
     port = arm_config.get("port", "")
     robot_type = arm_config.get("robot_type", "so101")
@@ -156,7 +156,7 @@ def check_arm_health(arm_config: dict[str, Any]) -> ArmHealthReport:
 
 
 def check_camera_health(camera_config: dict[str, Any]) -> CameraHealthReport:
-    """"""Check whether a camera is online and can capture a frame.
+    """Check whether a camera is online and can capture a frame.
 
     Uses OpenCV to open the device and attempt a single frame grab.
 
@@ -166,7 +166,7 @@ def check_camera_health(camera_config: dict[str, Any]) -> CameraHealthReport:
 
     Returns:
         A `CameraHealthReport`.
-    """"""
+    """
     camera_id = camera_config.get("id", "unknown")
     device = camera_config.get("device", "")
 
@@ -197,14 +197,14 @@ def check_camera_health(camera_config: dict[str, Any]) -> CameraHealthReport:
 
 
 def check_all_health(project: dict[str, Any]) -> HealthReport:
-    """"""Run health checks on all registered arms and cameras.
+    """Run health checks on all registered arms and cameras.
 
     Args:
         project: The loaded project dict.
 
     Returns:
         An aggregate `HealthReport`.
-    """"""
+    """
     report = HealthReport()
 
     for arm in project.get("hardware", {}).get("arms", []):
