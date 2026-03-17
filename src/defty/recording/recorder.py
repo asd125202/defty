@@ -170,7 +170,25 @@ def record(
     # Each dataset lives in its own subdirectory: data/<local_name>/
     # This avoids FileExistsError when the parent data/ dir already exists.
     local_name = ds_name.split("/")[-1]
-    dataset_root = str(yaml_path.parent / "data" / local_name)
+    dataset_root_path = yaml_path.parent / "data" / local_name
+    dataset_root = str(dataset_root_path)
+
+    # Pre-flight: handle leftover dirs from previous failed/aborted runs.
+    # lerobot calls LeRobotDatasetMetadata.create() with exist_ok=False, so
+    # any pre-existing directory causes FileExistsError even if empty.
+    if dataset_root_path.exists() and not resume:
+        meta_file = dataset_root_path / "meta" / "info.json"
+        if meta_file.exists():
+            raise RuntimeError(
+                f"Dataset '{local_name}' already exists at {dataset_root}.\n"
+                "  • To add more episodes: defty record --resume ...\n"
+                "  • To start over: delete the data directory and re-run."
+            )
+        else:
+            # Partial/empty dir from a previous crash — clean up silently.
+            import shutil
+            logger.info("Removing incomplete dataset directory from previous run: %s", dataset_root)
+            shutil.rmtree(dataset_root_path)
 
     task_desc = task or "Task recorded with Defty"
 
