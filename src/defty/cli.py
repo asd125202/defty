@@ -526,16 +526,49 @@ def hardware_import(source_path, path) -> None:
 def upgrade() -> None:
     """Upgrade defty to the latest version from GitHub."""
     repo_url = "https://github.com/asd125202/defty.git"
-    click.echo(f"Upgrading defty from {repo_url}...")
 
     uv = _find_uv()
     if uv is None:
         click.echo("Error: 'uv' not found. Install: https://docs.astral.sh/uv/", err=True)
         sys.exit(1)
 
+    if sys.platform == "win32":
+        # On Windows the running defty.exe locks its own Scripts\ directory, so
+        # uv cannot overwrite it while this process is alive.  Workaround:
+        # write a small batch script to a temp location, spawn it in a new
+        # console window (so the user can see progress), then exit immediately
+        # so the lock is released.  The batch script waits for our PID to
+        # disappear before calling uv.
+        import os
+        import tempfile
+
+        pid = os.getpid()
+        bat_lines = [
+            "@echo off",
+            f"echo Waiting for defty to exit (PID {pid})...",
+            ":wait",
+            f'tasklist /FI "PID eq {pid}" 2>nul | find /I "{pid}" >nul',
+            "if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)",
+            f"echo Upgrading defty from {repo_url}...",
+            f'"{uv}" tool install git+{repo_url} --force',
+            "if errorlevel 1 (echo. & echo Upgrade FAILED. & pause) else (echo. & echo defty upgraded successfully. & timeout /t 3)",
+        ]
+        bat_path = Path(tempfile.gettempdir()) / "defty_upgrade.bat"
+        bat_path.write_text("\r\n".join(bat_lines), encoding="utf-8")
+
+        subprocess.Popen(
+            ["cmd", "/c", str(bat_path)],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            close_fds=True,
+        )
+        click.echo("Upgrade started in a new window — please wait for it to complete.")
+        sys.exit(0)
+
+    # Linux / macOS: no file-locking issue, run directly.
+    click.echo(f"Upgrading defty from {repo_url}...")
     result = subprocess.run([uv, "tool", "install", f"git+{repo_url}", "--force"], check=False)
     if result.returncode != 0:
-        click.echo("Upgrade failed.", err=True)
+        click.echo("Upgrade failed. Check the output above.", err=True)
         sys.exit(result.returncode)
     click.echo("defty upgraded successfully.")
 
