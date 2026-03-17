@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""""""Cross-platform hardware fingerprinting for USB devices.
+"""Cross-platform hardware fingerprinting for USB devices.
 
 Generates stable identifiers for serial adapters and cameras so that
 Defty can re-associate hardware even when OS-assigned port names change
@@ -33,7 +33,7 @@ For cameras the strategy depends on the platform:
   - Linux:  `udevadm info` → `ID_SERIAL` + `ID_PATH`  (same as Pineapple)
   - macOS:  `system_profiler SPCameraDataType` → unique-id
   - Windows: `wmic path Win32_PnPEntity` or device instance path
-""""""
+"""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class HardwareInfo:
-    """"""Resolved hardware information for a device.""""""
+    """Resolved hardware information for a device."""
 
     hardware_id: str
     vendor: str
@@ -71,7 +71,7 @@ class HardwareInfo:
 
 
 def resolve_hardware_id(port_info: ListPortInfo) -> str | None:
-    """"""Build a stable hardware identifier from a pyserial `ListPortInfo`.
+    """Build a stable hardware identifier from a pyserial `ListPortInfo`.
 
     Args:
         port_info: A `ListPortInfo` object returned by
@@ -79,7 +79,7 @@ def resolve_hardware_id(port_info: ListPortInfo) -> str | None:
 
     Returns:
         A fingerprint string, or *None* if the device cannot be identified.
-    """"""
+    """
     serial = port_info.serial_number or ""
     location = port_info.location or ""
     vid = port_info.vid
@@ -101,14 +101,14 @@ def resolve_hardware_id(port_info: ListPortInfo) -> str | None:
 
 
 def resolve_hardware_info(port_info: ListPortInfo) -> HardwareInfo:
-    """"""Extract detailed hardware info from a `ListPortInfo`.
+    """Extract detailed hardware info from a `ListPortInfo`.
 
     Args:
         port_info: A `ListPortInfo` from `comports()`.
 
     Returns:
         A `HardwareInfo` dataclass with all available metadata.
-    """"""
+    """
     return HardwareInfo(
         hardware_id=resolve_hardware_id(port_info) or "",
         vendor=port_info.manufacturer or "",
@@ -122,7 +122,7 @@ def resolve_hardware_info(port_info: ListPortInfo) -> HardwareInfo:
 
 
 def resolve_camera_hardware_id(device_path: str | int) -> str | None:
-    """"""Build a stable hardware identifier for a camera device.
+    """Build a stable hardware identifier for a camera device.
 
     On Linux, queries `udevadm info`.  On macOS, uses
     `system_profiler`.  On Windows, uses WMI device instance paths.
@@ -133,7 +133,7 @@ def resolve_camera_hardware_id(device_path: str | int) -> str | None:
 
     Returns:
         A fingerprint string, or *None*.
-    """"""
+    """
     system = platform.system()
     if system == "Linux":
         return _camera_id_linux(str(device_path))
@@ -145,14 +145,14 @@ def resolve_camera_hardware_id(device_path: str | int) -> str | None:
 
 
 def resolve_camera_hardware_info(device_path: str | int) -> dict[str, str]:
-    """"""Return a dict of camera metadata (hardware_id, vendor, model, serial).
+    """Return a dict of camera metadata (hardware_id, vendor, model, serial).
 
     Args:
         device_path: The camera device path or index.
 
     Returns:
         A dict with keys `hardware_id`, `vendor`, `model`, `serial`.
-    """"""
+    """
     system = platform.system()
     if system == "Linux":
         return _camera_info_linux(str(device_path))
@@ -168,14 +168,14 @@ def resolve_camera_hardware_info(device_path: str | int) -> dict[str, str]:
 
 
 def _udevadm_props(device: str) -> dict[str, str]:
-    """"""Query udevadm for device properties.
+    """Query udevadm for device properties.
 
     Args:
         device: Device path such as `/dev/video0`.
 
     Returns:
         A dict of `KEY=value` pairs from `udevadm info`.
-    """"""
+    """
     try:
         out = subprocess.check_output(
             ["udevadm", "info", "--query=property", "--name", device],
@@ -195,7 +195,7 @@ def _udevadm_props(device: str) -> dict[str, str]:
 
 
 def _camera_id_linux(device: str) -> str | None:
-    """"""Resolve camera hardware ID on Linux via udevadm.""""""
+    """Resolve camera hardware ID on Linux via udevadm."""
     props = _udevadm_props(device)
     serial = props.get("ID_SERIAL")
     path = props.get("ID_PATH")
@@ -217,7 +217,7 @@ def _camera_id_linux(device: str) -> str | None:
 
 
 def _camera_info_linux(device: str) -> dict[str, str]:
-    """"""Get camera metadata on Linux.""""""
+    """Get camera metadata on Linux."""
     props = _udevadm_props(device)
     return {
         "hardware_id": _camera_id_linux(device) or "",
@@ -231,7 +231,7 @@ def _camera_info_linux(device: str) -> dict[str, str]:
 
 
 def _camera_id_macos(device: str) -> str | None:
-    """"""Resolve camera hardware ID on macOS via system_profiler.""""""
+    """Resolve camera hardware ID on macOS via system_profiler."""
     try:
         out = subprocess.check_output(
             ["system_profiler", "SPCameraDataType"],
@@ -252,12 +252,12 @@ def _camera_id_macos(device: str) -> str | None:
 
 
 def _camera_id_windows(device: str) -> str | None:
-    """"""Resolve camera hardware ID on Windows.
+    """Resolve camera hardware ID on Windows.
 
     Uses `pnputil` or the device instance path from the registry.
     This is a best-effort approach — many USB cameras on Windows expose
     a device instance path like `USB\\VID_xxxx&PID_xxxx\\serial`.
-    """"""
+    """
     try:
         out = subprocess.check_output(
             ["pnputil", "/enum-devices", "/class", "Camera", "/connected"],
