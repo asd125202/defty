@@ -22,8 +22,9 @@ config object injection when the first argument is already the target type).
 
 from __future__ import annotations
 
+import contextlib
 import logging
-import subprocess
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,70 @@ from defty.utils import spawn_rerun_detached
 logger = logging.getLogger(__name__)
 
 __all__ = ["record"]
+
+
+# ── Logging prettifier ────────────────────────────────────────────────────────
+
+_PHASE_MAP: dict[str, tuple[str, str]] = {
+    "Recording episode": ("🔴", "REC"),
+    "Re-record episode": ("↩ ", "RE-RECORD"),
+    "Reset the environment": ("⏸ ", "RESET"),
+    "Stop recording": ("⏹ ", "STOPPING"),
+    "Exiting": ("✓ ", "DONE"),
+}
+
+
+class _PhaseFilter(logging.Filter):
+    """Reformat lerobot phase-transition messages with visual separators."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        for keyword, (icon, label) in _PHASE_MAP.items():
+            if keyword in msg:
+                sep = "─" * 55
+                record.msg = f"\n{sep}\n  {icon}  {label:<12} {msg}\n{sep}"
+                record.args = ()
+                break
+        return True
+
+
+# ── C-level stdout suppressor (kills SVT-AV1 encoder noise) ──────────────────
+
+
+@contextlib.contextmanager
+def _suppress_c_stdout():
+    """Redirect C-level fd 1 to /dev/null to silence SVT-AV1 encoder noise.
+
+    SVT-AV1 writes its verbose init messages directly to the C runtime's
+    stdout (fd 1), bypassing Python logging.  Redirecting fd 1 while keeping
+    fd 2 (Python logging / stderr) intact cleans up the recording output.
+    Falls back silently on any OS error.
+    """
+    old_sys_stdout = sys.stdout
+    old_fd: int | None = None
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        old_fd = os.dup(1)
+        os.dup2(devnull_fd, 1)
+        os.close(devnull_fd)
+        sys.stdout = open(os.devnull, "w")
+    except OSError:
+        pass  # If fd tricks fail, just run without suppression
+
+    try:
+        yield
+    finally:
+        try:
+            sys.stdout.close()
+        except Exception:
+            pass
+        sys.stdout = old_sys_stdout
+        if old_fd is not None:
+            try:
+                os.dup2(old_fd, 1)
+                os.close(old_fd)
+            except OSError:
+                pass
 
 
 def record(
@@ -191,10 +256,28 @@ def record(
         play_sounds=False,  # disable: requires PowerShell on Windows (blocked by execution policy)
     )
 
+    # Install phase-separator filter on the root logger so lerobot's
+    # `logging.info("Recording episode …")` calls stand out visually.
+    root_logger = logging.getLogger()
+    phase_filter = _PhaseFilter()
+    root_logger.addFilter(phase_filter)
+
     try:
-        # @parser.wrap() passes cfg through when first arg is already the target type
-        lerobot_record(cfg)
+        with _suppress_c_stdout():
+            try:
+                # @parser.wrap() passes cfg through when first arg is already the target type
+                lerobot_record(cfg)
+            except ValueError as exc:
+                if "add_frame" in str(exc):
+                    logger.warning(
+                        "Recording ended with an empty episode — "
+                        "you pressed → or Esc before the arm recorded any frames. "
+                        "All previously completed episodes were saved."
+                    )
+                else:
+                    raise
     finally:
+        root_logger.removeFilter(phase_filter)
         if rerun_proc is not None:
             try:
                 rerun_proc.terminate()

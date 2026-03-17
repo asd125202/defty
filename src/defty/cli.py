@@ -766,9 +766,17 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
     """
     from defty.recording.recorder import record as do_record
 
-    click.echo(
-        "Recording controls:  → end episode   ← re-record last   Esc stop"
-    )
+    # ── Banner ────────────────────────────────────────────────────────────────
+    task_label = task or "Task recorded with Defty"
+    sep = "═" * 55
+    click.echo(f"""
+{sep}
+  defty record
+  Task     : {task_label}
+  Episodes : {episodes}
+  Controls : → save episode   ← re-record   Esc stop
+{sep}
+""")
     _ensure_project(path)
     try:
         do_record(
