@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `transformers` added to core dependencies — required by VLA policies
-  (`pi0`, `pi0_fast`, `pi05`, `smolvla`, etc.) for tokenizer loading.
+- `transformers` and `scipy` added to core dependencies — required by VLA
+  policies (`pi0`, `pi0_fast`, `pi05`, `smolvla`, etc.) for tokenizer loading
+  and action processing. These are optional in LeRobot (`lerobot[pi]`) but
+  must be explicit in defty since we install `lerobot[feetech]`.
 
 ## [0.2.3] — 2026-03-18
 

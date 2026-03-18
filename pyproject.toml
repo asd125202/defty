@@ -38,6 +38,7 @@ dependencies = [
     "torch>=2.3.0",  # explicit so [tool.uv.sources] index selection applies
     "huggingface-hub>=0.20.0",
     "transformers>=4.38.0",  # required by VLA policies (pi0, pi0_fast, smolvla, etc.)
+    "scipy>=1.14.0",  # required by VLA policies (pi0, pi0_fast, etc.)
 ]
 
 [project.optional-dependencies]
