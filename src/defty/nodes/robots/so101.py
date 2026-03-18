@@ -93,22 +93,47 @@ class LeRobotSO101Interface(RobotInterface):
             logger.info("Disconnected from SO-101")
 
     def get_observation(self) -> dict[str, Any]:
-        """Read joint positions and camera frames from the robot."""
+        """Read joint positions and camera frames from the robot.
+
+        Returns a dict with standardised keys:
+        - ``"observation.state"``: float32 numpy array ``[n_motors]`` in motor
+          tick order (shoulder_pan, shoulder_lift, elbow_flex, wrist_flex,
+          wrist_roll, gripper for SO-101).
+        - ``"observation.images.{cam_id}"``: uint8 numpy array ``[H, W, C]``
+          for each configured camera.
+        - ``"_motor_names"``: list of motor name strings in state order.
+        """
         if self._robot is None:
             raise RuntimeError("Robot not connected. Call connect() first.")
-        obs = self._robot.get_observation()
+        import numpy as np
+
+        raw = self._robot.get_observation()
         result: dict[str, Any] = {}
-        for key, value in obs.items():
-            if "position" in key.lower() or "state" in key.lower():
-                result["joint_positions"] = value
-                break
-        for key, value in obs.items():
-            if "image" in key.lower() or "camera" in key.lower():
-                result[f"camera_{key}"] = value
+
+        # Motor positions: lerobot keys end with ".pos" (e.g. "shoulder_pan.pos").
+        # Preserve insertion order — lerobot keeps motors in bus-registration order.
+        motor_items = [(k, v) for k, v in raw.items() if k.endswith(".pos")]
+        if motor_items:
+            motor_names = [k.removesuffix(".pos") for k, _ in motor_items]
+            result["observation.state"] = np.array(
+                [v for _, v in motor_items], dtype=np.float32
+            )
+            result["_motor_names"] = motor_names
+
+        # Camera frames: lerobot stores them under the camera id key directly.
+        for cam_id in self.cameras_config:
+            if cam_id in raw:
+                result[f"observation.images.{cam_id}"] = raw[cam_id]
+
         return result
 
     def send_action(self, action: dict[str, Any]) -> None:
-        """Send motor commands to the SO-101 arm."""
+        """Send motor commands to the SO-101 arm.
+
+        Args:
+            action: Dict mapping ``"{motor_name}.pos"`` → int motor-tick value.
+                    Example: ``{"gripper.pos": 2000, "shoulder_pan.pos": 2048}``
+        """
         if self._robot is None:
             raise RuntimeError("Robot not connected. Call connect() first.")
         self._robot.send_action(action)

@@ -32,16 +32,21 @@ class CameraCaptureNode(Node):
         super().__init__(name=name)
 
     def tick(self, context: Context) -> NodeStatus:
-        """Capture frames from all cameras."""
+        """Capture frames from all cameras into ``context.cameras``."""
         if context.robot is None:
             logger.warning("CameraCaptureNode: no robot connected")
             return NodeStatus.failure(reason="no_robot")
         try:
             obs = context.robot.get_observation()
+            frames_captured = 0
             for key, value in obs.items():
-                if key.startswith("camera_") or key.startswith("image_"):
+                if key.startswith("observation.images."):
                     context.cameras[key] = value
-            logger.debug("Captured %d camera frames", len(context.cameras))
+                    frames_captured += 1
+            if frames_captured == 0:
+                logger.warning("CameraCaptureNode: no camera frames in observation")
+                return NodeStatus.failure(reason="no_camera_frames")
+            logger.debug("Captured %d camera frame(s)", frames_captured)
             return NodeStatus.success()
         except Exception as exc:
             logger.error("Camera capture failed: %s", exc)

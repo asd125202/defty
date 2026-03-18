@@ -27,9 +27,14 @@ __all__ = ["JointControlNode", "GripperOpenNode", "GripperCloseNode", "RelativeM
 
 
 class JointControlNode(Node):
-    """Read target joint angles from the blackboard and send to the robot."""
+    """Read target joint positions from the blackboard and send to the robot.
 
-    def __init__(self, source: str = "joint_target", name: str | None = None) -> None:
+    The blackboard value at *source* must be either:
+    - a list/array of motor-tick values in motor-bus order, or
+    - a dict mapping ``"{motor_name}.pos"`` → int directly.
+    """
+
+    def __init__(self, source: str = "action", name: str | None = None) -> None:
         super().__init__(name=name)
         self.source = source
 
@@ -43,7 +48,29 @@ class JointControlNode(Node):
             logger.warning("JointControlNode: key %r not in memory", self.source)
             return NodeStatus.failure(reason=f"missing_key:{self.source}")
         try:
-            context.robot.send_action({"joint_positions": target})
+            # Accept either a plain dict (already .pos keys) or a list/array
+            if isinstance(target, dict):
+                context.robot.send_action(target)
+            else:
+                import numpy as np
+
+                arr = np.asarray(target, dtype=np.float32)
+                # Get motor names from latest observation for mapping
+                obs = context.robot.get_observation()
+                motor_names: list[str] = obs.get("_motor_names") or []
+                if len(motor_names) == len(arr):
+                    action = {
+                        f"{name}.pos": int(round(float(v)))
+                        for name, v in zip(motor_names, arr)
+                    }
+                    context.robot.send_action(action)
+                else:
+                    logger.warning(
+                        "JointControlNode: cannot map %d values to %d motors",
+                        len(arr),
+                        len(motor_names),
+                    )
+                    return NodeStatus.failure(reason="motor_count_mismatch")
             return NodeStatus.success()
         except Exception as exc:
             logger.error("JointControlNode failed: %s", exc)
@@ -51,17 +78,25 @@ class JointControlNode(Node):
 
 
 class GripperOpenNode(Node):
-    """Open the gripper. Sends gripper=1.0 to the robot."""
+    """Open the gripper to a target motor position.
 
-    def __init__(self, name: str | None = None) -> None:
+    Args:
+        position: Target gripper motor position in raw ticks (0–4095 for
+                  Feetech STS3215).  Default ``1500`` is a safe open position
+                  for SO-101 — adjust to match your hardware calibration.
+        name: Optional node name.
+    """
+
+    def __init__(self, position: int = 1500, name: str | None = None) -> None:
         super().__init__(name=name)
+        self.position = position
 
     def tick(self, context: Context) -> NodeStatus:
         """Open the gripper."""
         if context.robot is None:
             return NodeStatus.failure(reason="no_robot")
         try:
-            context.robot.send_action({"gripper": 1.0})
+            context.robot.send_action({"gripper.pos": self.position})
             return NodeStatus.success()
         except Exception as exc:
             logger.error("GripperOpenNode failed: %s", exc)
@@ -69,17 +104,26 @@ class GripperOpenNode(Node):
 
 
 class GripperCloseNode(Node):
-    """Close the gripper. Sends gripper=0.0 to the robot."""
+    """Close the gripper to a target motor position.
 
-    def __init__(self, name: str | None = None) -> None:
+    Args:
+        position: Target gripper motor position in raw ticks (0–4095 for
+                  Feetech STS3215).  Default ``3500`` is a safe closed
+                  position for SO-101 — adjust to match your hardware
+                  calibration.
+        name: Optional node name.
+    """
+
+    def __init__(self, position: int = 3500, name: str | None = None) -> None:
         super().__init__(name=name)
+        self.position = position
 
     def tick(self, context: Context) -> NodeStatus:
         """Close the gripper."""
         if context.robot is None:
             return NodeStatus.failure(reason="no_robot")
         try:
-            context.robot.send_action({"gripper": 0.0})
+            context.robot.send_action({"gripper.pos": self.position})
             return NodeStatus.success()
         except Exception as exc:
             logger.error("GripperCloseNode failed: %s", exc)

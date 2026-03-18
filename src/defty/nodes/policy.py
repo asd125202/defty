@@ -28,11 +28,16 @@ __all__ = ["ACTPolicyNode"]
 
 
 class ACTPolicyNode(Node):
-    """Run a trained policy model to produce robot actions.
+    """Run a trained ACT policy model to produce and send robot actions.
+
+    On the first tick the model is loaded lazily from *model*.  Each tick
+    reads an observation from the connected robot, runs one inference step,
+    and immediately sends the resulting joint-position command back to the arm.
 
     Args:
-        model: Path to the model directory.
-        output_key: Blackboard key to store the predicted action.
+        model: Path to the model directory (may contain a ``checkpoints/``
+               sub-tree; the latest checkpoint is used automatically).
+        output_key: Blackboard key where the raw action tensor is stored.
         name: Optional node name.
     """
 
@@ -41,15 +46,14 @@ class ACTPolicyNode(Node):
         self.model_path = model
         self.output_key = output_key
         self._policy: Any = None
-        self._device: str = "cpu"
 
-    def _load_policy(self) -> None:
-        """Lazily load the policy model on first tick."""
-        if self._policy is not None:
-            return
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_model_dir(self) -> Path:
+        """Return the ``pretrained_model`` directory for the latest checkpoint."""
         model_dir = Path(self.model_path)
-        if not model_dir.exists():
-            raise FileNotFoundError(f"Model not found: {self.model_path}")
         ckpt_root = model_dir / "checkpoints"
         if ckpt_root.exists():
             step_dirs = sorted(
@@ -59,48 +63,96 @@ class ACTPolicyNode(Node):
             if step_dirs:
                 pretrained = step_dirs[-1] / "pretrained_model"
                 if pretrained.exists():
-                    model_dir = pretrained
+                    return pretrained
+        return model_dir
+
+    def _load_policy(self) -> None:
+        """Lazily load the ACT policy from the model directory."""
+        if self._policy is not None:
+            return
+        model_dir = self._resolve_model_dir()
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model not found: {model_dir}")
         try:
             import torch
-            from lerobot.configs.policies import PreTrainedConfig
-            config = PreTrainedConfig.from_pretrained(str(model_dir))
-            config.pretrained_path = model_dir
-            if torch.cuda.is_available():
-                self._device = "cuda"
-            elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-                self._device = "mps"
-            else:
-                self._device = "cpu"
-            config.device = self._device
-            self._policy = config
-            logger.info("Loaded policy from %s on %s", model_dir, self._device)
-        except ImportError:
-            logger.warning("LeRobot not available — ACTPolicyNode will use mock inference")
-            self._policy = "mock"
+            from lerobot.policies.act.modeling_act import ACTPolicy
+
+            self._policy = ACTPolicy.from_pretrained(str(model_dir))
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            self._policy = self._policy.to(device)
+            self._policy.eval()
+            logger.info("Loaded ACT policy from %s on %s", model_dir, device)
+        except ImportError as exc:
+            raise RuntimeError(f"lerobot import failed: {exc}") from exc
+
+    # ------------------------------------------------------------------
+    # Node tick
+    # ------------------------------------------------------------------
 
     def tick(self, context: Context) -> NodeStatus:
-        """Run one inference step with the loaded policy."""
+        """Load policy (once), observe, infer, and send action to robot."""
         try:
             self._load_policy()
         except Exception as exc:
             logger.error("Failed to load policy: %s", exc)
             return NodeStatus.failure(reason=str(exc))
-        if self._policy == "mock":
-            context.memory[self.output_key] = {"joint_positions": []}
-            return NodeStatus.success()
+
+        if context.robot is None:
+            return NodeStatus.failure(reason="no_robot")
+
         try:
-            observation: dict[str, Any] = {}
-            observation.update(context.cameras)
-            observation.update(context.joint_states)
-            context.memory[self.output_key] = {
-                "policy_config": self._policy,
-                "observation": observation,
-            }
-            if context.robot is not None:
-                action = context.memory.get(self.output_key, {})
-                if "joint_positions" in action:
-                    context.robot.send_action(action)
+            import numpy as np
+            import torch
+
+            obs = context.robot.get_observation()
+            batch: dict[str, Any] = {}
+
+            # --- joint state ---
+            if "observation.state" in obs:
+                state = np.asarray(obs["observation.state"], dtype=np.float32)
+                batch["observation.state"] = torch.from_numpy(state).unsqueeze(0)
+
+            # --- camera images ---
+            for key, value in obs.items():
+                if key.startswith("observation.images."):
+                    img = np.asarray(value, dtype=np.float32) / 255.0
+                    if img.ndim == 3:
+                        img = img.transpose(2, 0, 1)  # HWC → CHW
+                    batch[key] = torch.from_numpy(img).unsqueeze(0)  # [1, C, H, W]
+
+            if not batch:
+                logger.warning("ACTPolicyNode: observation is empty")
+                return NodeStatus.failure(reason="empty_observation")
+
+            # Move tensors to policy device
+            device = next(self._policy.parameters()).device
+            batch = {k: v.to(device) for k, v in batch.items()}
+
+            # Run inference
+            action: Any = self._policy.select_action(batch)  # Tensor [n_actions]
+            action_np = action.detach().cpu().numpy()
+
+            # Store in blackboard
+            context.memory[self.output_key] = action_np
+
+            # Send to robot: map values back to motor .pos keys
+            motor_names: list[str] = obs.get("_motor_names") or []
+            if motor_names and len(action_np) == len(motor_names):
+                robot_action = {
+                    f"{name}.pos": int(round(float(val)))
+                    for name, val in zip(motor_names, action_np)
+                }
+                context.robot.send_action(robot_action)
+            else:
+                logger.warning(
+                    "ACTPolicyNode: motor_names length %d != action length %d; "
+                    "action not sent",
+                    len(motor_names),
+                    len(action_np),
+                )
+
             return NodeStatus.success()
+
         except Exception as exc:
             logger.error("Policy inference failed: %s", exc)
             return NodeStatus.failure(reason=str(exc))
