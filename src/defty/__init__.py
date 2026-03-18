@@ -14,6 +14,14 @@
 # limitations under the License.
 """Defty — Physical AI IDE for robot intelligence development."""
 
+import os
+
+# Disable OpenCV's obsensor backend globally.  The obsensor UVC driver probes
+# every camera index on open, producing noisy "[ERROR] obsensor_uvc_stream_channel"
+# messages and — critically — interfering with simultaneous camera access on
+# Windows (camera N fails to open while camera M is already streaming).
+os.environ.setdefault("OPENCV_VIDEOIO_PRIORITY_OBSENSOR", "0")
+
 from defty.__version__ import __version__
 
 __all__ = ["__version__"]

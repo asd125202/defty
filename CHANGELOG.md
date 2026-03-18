@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-03-18
+
+### Fixed
+
+- **Camera recording failure on Windows** — disabled OpenCV's obsensor UVC backend
+  (`OPENCV_VIDEOIO_PRIORITY_OBSENSOR=0`) which was interfering with simultaneous
+  camera access: opening Camera 1 while Camera 2 was already streaming triggered
+  obsensor driver errors that corrupted the USB state, causing `ConnectionError`.
+- Obsensor `[ERROR] obsensor_uvc_stream_channel.cpp` noise eliminated from all
+  camera operations (scan, record, teleoperate, preview).
+
 ## [0.2.0] — 2026-03-18
 
 ### Added
