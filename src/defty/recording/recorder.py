@@ -351,7 +351,7 @@ def record(
                 break  # Recording completed successfully
 
             except ConnectionError as exc:
-                # Servo connection lost — discard current episode, retry
+                # Servo/camera connection lost — discard current episode, retry
                 if reconnect_deadline is None:
                     reconnect_deadline = time.time() + _RECONNECT_TIMEOUT_S
 
@@ -372,7 +372,18 @@ def record(
                 )
                 time.sleep(_RECONNECT_INTERVAL_S)
 
-                # Rebuild config with resume=True so completed episodes are kept
+                # Check if any episodes were saved before the crash.
+                # If not, the dataset dir is an empty shell that lerobot
+                # cannot resume from — clean it up and start fresh.
+                meta_ok = (
+                    (dataset_root_path / "meta" / "info.json").exists()
+                    and (dataset_root_path / "meta" / "tasks.parquet").exists()
+                )
+                if not meta_ok and dataset_root_path.exists():
+                    import shutil
+                    shutil.rmtree(dataset_root_path, ignore_errors=True)
+
+                # Rebuild config — resume only if there are saved episodes
                 dataset_cfg = DatasetRecordConfig(
                     repo_id=ds_name,
                     single_task=task_desc,
@@ -391,7 +402,7 @@ def record(
                     display_data=display,
                     display_ip=display_ip,
                     display_port=display_port,
-                    resume=True,
+                    resume=meta_ok,
                     play_sounds=False,
                 )
     finally:
