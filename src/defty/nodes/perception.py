@@ -32,22 +32,31 @@ class CameraCaptureNode(Node):
         super().__init__(name=name)
 
     def tick(self, context: Context) -> NodeStatus:
-        """Capture frames from all cameras into ``context.cameras``."""
-        if context.robot is None:
-            logger.warning("CameraCaptureNode: no robot connected")
-            return NodeStatus.failure(reason="no_robot")
-        try:
-            obs = context.robot.get_observation()
-            frames_captured = 0
-            for key, value in obs.items():
-                if key.startswith("observation.images."):
-                    context.cameras[key] = value
-                    frames_captured += 1
-            if frames_captured == 0:
-                logger.warning("CameraCaptureNode: no camera frames in observation")
-                return NodeStatus.failure(reason="no_camera_frames")
-            logger.debug("Captured %d camera frame(s)", frames_captured)
-            return NodeStatus.success()
-        except Exception as exc:
-            logger.error("Camera capture failed: %s", exc)
-            return NodeStatus.failure(reason=str(exc))
+        """Check that camera frames are available in the context.
+
+        The engine pre-populates ``context.cameras`` via ``_refresh_context()``
+        before each tick, so this node acts as a gate: it succeeds when at
+        least one camera frame is present and fails otherwise.
+        If ``context.cameras`` is empty (first tick or no robot), it falls back
+        to reading directly from the robot.
+        """
+        if not context.cameras and context.robot is not None:
+            # Fallback: populate cameras directly on first tick
+            try:
+                obs = context.robot.get_observation()
+                for key, value in obs.items():
+                    if key.startswith("observation.images."):
+                        context.cameras[key] = value
+            except Exception as exc:
+                logger.error("Camera capture failed: %s", exc)
+                return NodeStatus.failure(reason=str(exc))
+
+        if not context.cameras:
+            if context.robot is None:
+                logger.warning("CameraCaptureNode: no robot connected")
+                return NodeStatus.failure(reason="no_robot")
+            logger.warning("CameraCaptureNode: no camera frames in context")
+            return NodeStatus.failure(reason="no_camera_frames")
+
+        logger.debug("CameraCaptureNode: %d camera frame(s) available", len(context.cameras))
+        return NodeStatus.success()

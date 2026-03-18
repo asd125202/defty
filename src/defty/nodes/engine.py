@@ -77,15 +77,23 @@ class BehaviorTreeRunner:
         self._running = False
 
     def _refresh_context(self) -> None:
-        """Pull fresh observations from the robot into the context."""
+        """Pull fresh observations from the robot into the context.
+
+        Stores results under the canonical lerobot 0.5.0 keys:
+        - ``context.joint_states["observation.state"]`` — float32 array
+        - ``context.joint_states["_motor_names"]`` — list of motor name strings
+        - ``context.cameras["observation.images.{cam_id}"]`` — uint8 HWC arrays
+        """
         if self.context.robot is None:
             return
         try:
             obs = self.context.robot.get_observation()
-            if "joint_positions" in obs:
-                self.context.joint_states = obs
+            if "observation.state" in obs:
+                self.context.joint_states["observation.state"] = obs["observation.state"]
+            if "_motor_names" in obs:
+                self.context.joint_states["_motor_names"] = obs["_motor_names"]
             for key, value in obs.items():
-                if key.startswith("camera_"):
+                if key.startswith("observation.images."):
                     self.context.cameras[key] = value
         except Exception:
             logger.warning("Failed to refresh context from robot", exc_info=True)

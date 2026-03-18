@@ -104,16 +104,18 @@ class ACTPolicyNode(Node):
             import numpy as np
             import torch
 
-            obs = context.robot.get_observation()
+            # Read pre-populated observations from context (engine calls
+            # _refresh_context() before each tick — no need to re-read robot)
             batch: dict[str, Any] = {}
 
             # --- joint state ---
-            if "observation.state" in obs:
-                state = np.asarray(obs["observation.state"], dtype=np.float32)
-                batch["observation.state"] = torch.from_numpy(state).unsqueeze(0)
+            state = context.joint_states.get("observation.state")
+            if state is not None:
+                state_arr = np.asarray(state, dtype=np.float32)
+                batch["observation.state"] = torch.from_numpy(state_arr).unsqueeze(0)
 
             # --- camera images ---
-            for key, value in obs.items():
+            for key, value in context.cameras.items():
                 if key.startswith("observation.images."):
                     img = np.asarray(value, dtype=np.float32) / 255.0
                     if img.ndim == 3:
@@ -121,7 +123,7 @@ class ACTPolicyNode(Node):
                     batch[key] = torch.from_numpy(img).unsqueeze(0)  # [1, C, H, W]
 
             if not batch:
-                logger.warning("ACTPolicyNode: observation is empty")
+                logger.warning("ACTPolicyNode: context has no observation data")
                 return NodeStatus.failure(reason="empty_observation")
 
             # Move tensors to policy device
@@ -135,8 +137,8 @@ class ACTPolicyNode(Node):
             # Store in blackboard
             context.memory[self.output_key] = action_np
 
-            # Send to robot: map values back to motor .pos keys
-            motor_names: list[str] = obs.get("_motor_names") or []
+            # Send to robot using motor .pos keys from joint_states
+            motor_names: list[str] = context.joint_states.get("_motor_names") or []
             if motor_names and len(action_np) == len(motor_names):
                 robot_action = {
                     f"{name}.pos": int(round(float(val)))

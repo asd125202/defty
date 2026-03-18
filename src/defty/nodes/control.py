@@ -134,7 +134,7 @@ class RepeatNode(Node):
     def __init__(
         self,
         child: Node,
-        times: int = 1,
+        times: int = -1,
         until: Callable[[Context], bool] | None = None,
         name: str | None = None,
     ) -> None:
