@@ -44,8 +44,10 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "SerialPortInfo",
     "CameraInfo",
+    "OpenCVCameraProbe",
     "list_serial_ports",
     "list_cameras",
+    "probe_opencv_cameras",
 ]
 
 
@@ -301,3 +303,67 @@ def _windows_iid_to_hwid(iid: str) -> str:
             return f"serial:{serial_part}@{tag}"
         return tag
     return ""
+
+
+# ── OpenCV probe ─────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class OpenCVCameraProbe:
+    """Result of probing a single OpenCV camera index."""
+
+    index: int
+    width: int
+    height: int
+    can_read: bool
+    backend: str
+
+
+def probe_opencv_cameras(max_index: int = 10) -> list[OpenCVCameraProbe]:
+    """Try to open camera indices 0..*max_index* with OpenCV.
+
+    This performs real hardware access — each index is opened, queried for
+    resolution, and a single frame grab is attempted.  The result tells you
+    which indices *actually* work, independent of PnP enumeration.
+
+    On Windows, uses the MSMF (Media Foundation) backend which handles
+    index-based access reliably.  Other platforms use the default backend.
+
+    Returns:
+        A list of :class:`OpenCVCameraProbe` for every index that opens
+        successfully.
+    """
+    try:
+        import cv2
+    except ImportError:
+        logger.warning("opencv-python not installed — cannot probe cameras")
+        return []
+
+    system = platform.system()
+    if system == "Windows":
+        backend = 1400  # cv2.CAP_MSMF
+        backend_name = "MSMF"
+    else:
+        backend = 0  # cv2.CAP_ANY
+        backend_name = "ANY"
+
+    results: list[OpenCVCameraProbe] = []
+    for idx in range(max_index):
+        cap = cv2.VideoCapture(idx, backend)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            ret, _ = cap.read()
+            cap.release()
+            results.append(
+                OpenCVCameraProbe(
+                    index=idx, width=w, height=h,
+                    can_read=bool(ret), backend=backend_name,
+                )
+            )
+            logger.debug("OpenCV index %d: %dx%d read=%s (%s)", idx, w, h, ret, backend_name)
+        else:
+            cap.release()
+
+    logger.info("OpenCV probe found %d working camera index(es)", len(results))
+    return results

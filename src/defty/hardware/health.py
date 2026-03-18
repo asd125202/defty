@@ -177,7 +177,13 @@ def check_camera_health(camera_config: dict[str, Any]) -> CameraHealthReport:
         import cv2
 
         dev_arg: int | str = int(device) if device.isdigit() else device
-        cap = cv2.VideoCapture(dev_arg)
+        # MSMF (Media Foundation) handles index-based access reliably on
+        # modern Windows; CAP_ANY may try the obsensor UVC driver first
+        # and fail for standard USB cameras.
+        import platform as _plat
+
+        backend = cv2.CAP_MSMF if _plat.system() == "Windows" else cv2.CAP_ANY
+        cap = cv2.VideoCapture(dev_arg, backend)
         if not cap.isOpened():
             return CameraHealthReport(camera_id=camera_id, device=device, online=False, error="Cannot open device")
 

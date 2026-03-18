@@ -217,7 +217,7 @@ def run(
                 device = cam.get("device", "0")
                 idx = int(device) if str(device).isdigit() else device
                 backend = (
-                    Cv2Backends.DSHOW
+                    Cv2Backends.MSMF
                     if platform.system() == "Windows"
                     else Cv2Backends.ANY
                 )

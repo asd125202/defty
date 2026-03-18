@@ -144,8 +144,9 @@ def init(directory: str, name: str | None, description: str) -> None:
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
 def status(path: str | None) -> None:
-    """Show current project status."""
+    """Show current project status and verify hardware connectivity."""
     from defty.platform import detect_os
+    from defty.hardware.health import check_all_health
 
     yaml_path, project = _ensure_project(path)
 
@@ -157,13 +158,34 @@ def status(path: str | None) -> None:
     click.echo(f"Project:  {proj.get('name', '(unnamed)')}")
     click.echo(f"Location: {yaml_path.parent}")
     click.echo(f"OS:       {detect_os().value}")
+
+    report = check_all_health(project)
+    arm_reports = {r.arm_id: r for r in report.arms}
+    cam_reports = {r.camera_id: r for r in report.cameras}
+
     click.echo(f"Arms:     {len(arms)}")
     for arm in arms:
         calib = "calibrated" if arm.get("calibration") else "not calibrated"
-        click.echo(f"  - {arm['id']} ({arm.get('role', '?')}) on {arm.get('port', '?')} [{calib}]")
+        r = arm_reports.get(arm["id"])
+        if r and r.all_motors_ok:
+            icon = click.style("✓", fg="green")
+        elif r and r.reachable:
+            icon = click.style("⚠", fg="yellow")
+        else:
+            icon = click.style("✗", fg="red")
+        click.echo(f"  {icon} {arm['id']} ({arm.get('role', '?')}) on {arm.get('port', '?')} [{calib}]")
+        if r and r.error:
+            click.echo(f"    Error: {r.error}")
     click.echo(f"Cameras:  {len(cameras)}")
     for cam in cameras:
-        click.echo(f"  - {cam['id']} on {cam.get('device', '?')} ({cam.get('position', '?')})")
+        r = cam_reports.get(cam["id"])
+        if r and r.online:
+            icon = click.style("✓", fg="green")
+        else:
+            icon = click.style("✗", fg="red")
+        click.echo(f"  {icon} {cam['id']} on {cam.get('device', '?')} ({cam.get('position', '?')})")
+        if r and r.error:
+            click.echo(f"    Error: {r.error}")
 
 
 # ── defty scan ───────────────────────────────────────────────────────────────
@@ -255,25 +277,45 @@ def scan_find_port() -> None:
 
 @scan.command("cameras")
 @click.option("--preview", is_flag=True, help="Live ASCII art stream from each camera (press q to advance, Ctrl+C to quit).")
-def scan_cameras(preview: bool) -> None:
+@click.option("--opencv", is_flag=True, help="Probe with OpenCV to find real working indices.")
+def scan_cameras(preview: bool, opencv: bool) -> None:
     """List all connected cameras with fingerprint data.
 
     Use --preview to stream a live ASCII-art view from each camera so you
     can visually identify which index belongs to which physical device.
     Press 'q' to move to the next camera, Ctrl+C to stop.
+
+    Use --opencv to probe which camera indices actually work with
+    OpenCV's VideoCapture (the backend used for recording).
     """
     from defty.hardware.detector import list_cameras
 
     cameras = list_cameras()
     if not cameras:
         click.echo("No cameras found.")
-        return
-    for c in cameras:
-        click.echo(f"  [{c.index}] {c.name or '(unnamed)'}")
-        click.echo(f"    device:      {c.device}")
-        click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
-        if preview:
-            _camera_ascii_stream(c.index)
+    else:
+        click.echo("System cameras (PnP enumeration):")
+        for c in cameras:
+            click.echo(f"  [{c.index}] {c.name or '(unnamed)'}")
+            click.echo(f"    device:      {c.device}")
+            click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
+            if preview:
+                _camera_ascii_stream(c.index)
+
+    if opencv:
+        from defty.hardware.detector import probe_opencv_cameras
+
+        click.echo("")
+        click.echo("OpenCV probe (real VideoCapture test):")
+        probed = probe_opencv_cameras()
+        if not probed:
+            click.echo("  No working OpenCV camera indices found.")
+        else:
+            for p in probed:
+                status = "OK" if p.can_read else "open but no frame"
+                click.echo(f"  [{p.index}] {p.width}x{p.height}  {status}  (backend: {p.backend})")
+        click.echo("")
+        click.echo("Tip: Use the OpenCV indices above with 'defty setup add-camera --device <index>'")
 
 
 def _camera_ascii_stream(index: int, width: int = 80) -> None:
@@ -293,7 +335,7 @@ def _camera_ascii_stream(index: int, width: int = 80) -> None:
         kernel32.GetConsoleMode(handle, ctypes.byref(mode))
         kernel32.SetConsoleMode(handle, mode.value | 4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
 
-    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY)
+    cap = cv2.VideoCapture(index, cv2.CAP_MSMF if sys.platform == "win32" else cv2.CAP_ANY)
     if not cap.isOpened():
         click.echo(f"  (could not open camera {index})")
         return
