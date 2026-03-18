@@ -512,6 +512,10 @@ def setup_calibrate(arm_id, path) -> None:
     click.echo("Follow the prompts to physically move the arm.")
 
     try:
+        # Apply motor stability patches before creating any motor bus
+        from defty.recording.recorder import _apply_motor_stability_patches
+        _apply_motor_stability_patches()
+
         if robot_type in ("so101", "so100") and role == "follower":
             from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
             robot = SOFollower(SOFollowerRobotConfig(
@@ -707,6 +711,10 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
     except ImportError as exc:
         click.echo(f"Error: LeRobot not available — {exc}", err=True)
         sys.exit(1)
+
+    # Apply motor stability patches before creating any motor bus
+    from defty.recording.recorder import _apply_motor_stability_patches
+    _apply_motor_stability_patches()
 
     teleop = SOLeader(SOLeaderTeleopConfig(
         port=leader_arm["port"],

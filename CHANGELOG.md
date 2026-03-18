@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-03-18
+
+### Fixed
+
+- **Motor communication stability** — monkey-patch LeRobot's motor bus to retry
+  failed reads/writes 3 times (default was 0), preventing single-packet-loss from
+  killing the entire recording session. Applied to `sync_read`, `sync_write`,
+  `read`, and `write` operations.
+- **Serial timeout too aggressive** — increased Feetech motor bus default timeout
+  from 1000 ms to 2000 ms, giving more margin during USB bus contention.
+- **Image encoding blocking motor bus** — set `num_image_writer_processes=1` to
+  offload video frame encoding to a subprocess instead of the main thread.
+- **Reconnect too slow / gives up too early** — reduced retry interval from 10 s
+  to 5 s, extended timeout from 60 s to 120 s.
+- Patches applied consistently to `record`, `teleoperate`, `calibrate`, and `run`
+  commands via shared `_apply_motor_stability_patches()`.
+
 ## [0.2.2] — 2026-03-18
 
 ### Fixed

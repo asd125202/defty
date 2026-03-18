@@ -201,6 +201,10 @@ def run(
     except ImportError as exc:
         raise RuntimeError(f"LeRobot not available: {exc}") from exc
 
+    # Apply motor stability patches before lerobot creates any motor bus
+    from defty.recording.recorder import _apply_motor_stability_patches
+    _apply_motor_stability_patches()
+
     follower = followers[0]
 
     # Camera config (only if vision enabled).
@@ -241,6 +245,8 @@ def run(
         push_to_hub=False,
         episode_time_s=episode_time_s,
         reset_time_s=reset_time_s,
+        num_image_writer_processes=1,
+        num_image_writer_threads_per_camera=4,
     )
 
     # Load the policy config from the checkpoint

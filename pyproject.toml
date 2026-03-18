@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "defty"
-version = "0.2.2"
+version = "0.2.3"
 description = "Physical AI IDE — local-first IDE and skill format standard for robot intelligence development"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.12"

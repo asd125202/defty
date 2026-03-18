@@ -91,6 +91,76 @@ class _PhaseFilter(logging.Filter):
         return True
 
 
+# ── Motor stability patches ───────────────────────────────────────────────────
+
+_MOTOR_PATCHES_APPLIED = False
+
+
+def _apply_motor_stability_patches() -> None:
+    """Patch LeRobot's motor bus for improved connection stability.
+
+    LeRobot defaults to ``num_retry=0`` for all motor read/write operations,
+    meaning a single missed serial packet kills the entire recording session.
+    On Windows with CH343 USB-serial adapters, packet loss during USB bus
+    contention (e.g. simultaneous camera streaming) is common.
+
+    This patch:
+    - Increases the default retry count from 0 to 3 for all motor operations
+    - Doubles the serial packet timeout from 1000 ms to 2000 ms
+    """
+    global _MOTOR_PATCHES_APPLIED  # noqa: PLW0603
+    if _MOTOR_PATCHES_APPLIED:
+        return
+    _MOTOR_PATCHES_APPLIED = True
+
+    try:
+        from lerobot.motors.motors_bus import SerialMotorsBus
+        from lerobot.motors.feetech import feetech as _feetech_mod
+    except ImportError:
+        logger.debug("lerobot.motors not available — skipping stability patches")
+        return
+
+    # 1. Increase default timeout: 1000 ms → 2000 ms
+    _feetech_mod.DEFAULT_TIMEOUT_MS = 2000
+    _feetech_mod.FeetechMotorsBus.default_timeout = 2000
+
+    _DEFAULT_RETRY = 3
+
+    # 2. Wrap sync_read: num_retry 0 → 3
+    _orig_sync_read = SerialMotorsBus.sync_read
+
+    def _patched_sync_read(self, data_name, motors=None, *, normalize=True, num_retry=_DEFAULT_RETRY):
+        return _orig_sync_read(self, data_name, motors, normalize=normalize, num_retry=num_retry)
+
+    SerialMotorsBus.sync_read = _patched_sync_read
+
+    # 3. Wrap sync_write: num_retry 0 → 3
+    _orig_sync_write = SerialMotorsBus.sync_write
+
+    def _patched_sync_write(self, data_name, values, *, normalize=True, num_retry=_DEFAULT_RETRY):
+        return _orig_sync_write(self, data_name, values, normalize=normalize, num_retry=num_retry)
+
+    SerialMotorsBus.sync_write = _patched_sync_write
+
+    # 4. Wrap single-motor write (used by configure()): num_retry 0 → 3
+    _orig_write = SerialMotorsBus.write
+
+    def _patched_write(self, data_name, motor, value, *, normalize=True, num_retry=_DEFAULT_RETRY):
+        return _orig_write(self, data_name, motor, value, normalize=normalize, num_retry=num_retry)
+
+    SerialMotorsBus.write = _patched_write
+
+    # 5. Wrap single-motor read: num_retry 0 → 3
+    _orig_read = SerialMotorsBus.read
+
+    def _patched_read(self, data_name, motor, *, normalize=True, num_retry=_DEFAULT_RETRY):
+        return _orig_read(self, data_name, motor, normalize=normalize, num_retry=num_retry)
+
+    SerialMotorsBus.read = _patched_read
+
+    logger.info("Motor stability patches applied: timeout=2000ms, num_retry=%d", _DEFAULT_RETRY)
+
+
 # ── C-level stdout suppressor (kills SVT-AV1 encoder noise) ──────────────────
 
 
@@ -253,6 +323,9 @@ def record(
     except ImportError as exc:
         raise RuntimeError(f"LeRobot not available: {exc}") from exc
 
+    # Apply motor stability patches before lerobot creates any motor bus
+    _apply_motor_stability_patches()
+
     leader = leaders[0]
     follower = followers[0]
 
@@ -294,6 +367,8 @@ def record(
         episode_time_s=episode_time_s,
         reset_time_s=reset_time_s,
         streaming_encoding=True,
+        num_image_writer_processes=1,
+        num_image_writer_threads_per_camera=4,
     )
 
     # Pre-spawn Rerun viewer as a fully detached process so Ctrl+C during
@@ -328,9 +403,9 @@ def record(
     phase_filter = _PhaseFilter()
     root_logger.addFilter(phase_filter)
 
-    # Retry settings — cheap servo arms lose connection frequently
-    _RECONNECT_INTERVAL_S = 10
-    _RECONNECT_TIMEOUT_S = 60
+    # Retry settings — servo arms occasionally lose packets during USB contention
+    _RECONNECT_INTERVAL_S = 5
+    _RECONNECT_TIMEOUT_S = 120
     reconnect_deadline: float | None = None
 
     try:
@@ -395,6 +470,8 @@ def record(
                     episode_time_s=episode_time_s,
                     reset_time_s=reset_time_s,
                     streaming_encoding=True,
+                    num_image_writer_processes=1,
+                    num_image_writer_threads_per_camera=4,
                 )
                 cfg = RecordConfig(
                     robot=follower_cfg,
