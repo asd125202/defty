@@ -42,6 +42,26 @@ defty/
 │       │   ├── __init__.py          # Re-exports run()
 │       │   └── runner.py            # Run trained policy on robot
 │       │
+│       ├── nodes/                    # Phase 1–2: Behavior-tree node engine
+│       │   ├── __init__.py          # Public API re-exports
+│       │   ├── base.py              # Node ABC, NodeStatus, Context, RobotInterface
+│       │   ├── control.py           # Sequence, Selector, Repeat, Parallel
+│       │   ├── engine.py            # BehaviorTreeRunner (tick loop)
+│       │   ├── perception.py        # CameraCaptureNode
+│       │   ├── motion.py            # JointControl, GripperOpen/Close, RelativeMove
+│       │   ├── policy.py            # ACTPolicyNode (wraps LeRobot inference)
+│       │   ├── utility.py           # WaitNode, ConditionNode
+│       │   └── robots/
+│       │       ├── __init__.py      # Re-exports LeRobotSO101Interface
+│       │       └── so101.py         # RobotInterface impl for SO-101
+│       │
+│       ├── agents/                  # Phase 3: .defty agent runtime
+│       │   ├── __init__.py          # Public API re-exports
+│       │   ├── parser.py            # AST-based .defty file parser
+│       │   ├── registry.py          # NodeRegistry (name → class mapping)
+│       │   ├── ref.py               # AgentRef node (sub-agent composition)
+│       │   └── manager.py           # Agent CRUD (~/.defty/agents/)
+│       │
 │       └── training/
 │           ├── __init__.py          # Re-exports train()
 │           └── trainer.py           # Wrap LeRobot training pipeline
@@ -50,7 +70,9 @@ defty/
 │   ├── __init__.py
 │   ├── test_platform.py             # OS detection tests
 │   ├── test_project.py              # project.yaml CRUD tests
-│   └── test_registry.py             # Hardware registry tests
+│   ├── test_registry.py             # Hardware registry tests
+│   ├── test_nodes.py                # Node engine + leaf node tests (Phase 1–2)
+│   └── test_agents.py               # Agent system tests (Phase 3)
 │
 └── spec/
     ├── project-yaml.md              # project.yaml schema v0.1

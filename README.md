@@ -381,7 +381,7 @@ When `--record` is used, the rollout is saved to `data/run_<model>_001/` (auto-n
 
 ---
 
-### Cloud — Upload & Training
+### Cloud -- Upload & Training
 
 | Command | Description |
 |---------|-------------|
@@ -410,19 +410,71 @@ defty cloud train -d username/my-dataset --steps 100000
 defty cloud check my-training-space
 ```
 
-| Option | Flag | Description |
-|--------|------|-------------|
-| Token | `-t, --token` | HF token (setup only) |
-| Dataset | `-d, --dataset` | Dataset name or repo_id |
-| Repo ID | `--repo-id` | Custom Hub repository ID |
-| Private | `--private` | Create private Hub repository |
-| Provider | `--provider` | Training provider: `huggingface` / `google` / `azure` |
-| Steps | `--steps` | Training steps (default: 50000) |
-| Batch size | `--batch-size` | Batch size (default: 8) |
-| Policy | `--policy` | Policy type (default: `act`) |
-
 After `defty record` completes, you will be prompted to upload the dataset to Hugging Face Hub.
-Google Cloud (Vertex AI) and Azure ML providers are available as scaffolds — see CONTEXT.md for setup instructions.
+Google Cloud (Vertex AI) and Azure ML providers are available as scaffolds.
+
+---
+
+### Agent System -- .defty Agents
+
+> Define, manage, and run behavior-tree agents using `.defty` files.
+
+| Command | Description |
+|---------|-------------|
+| `defty agent create <name>` | Generate a new .defty agent from a template |
+| `defty agent run <name>` | Parse .defty, build behavior tree, connect hardware, execute |
+| `defty agent list` | List all agents with name, version, node count, robot type |
+| `defty agent info <name>` | Show agent details: tree structure, dependencies |
+
+```bash
+# Create a new agent
+defty agent create bread_loop
+
+# Edit the generated .defty file (~/.defty/agents/bread_loop/bread_loop.defty)
+# Then run it
+defty agent run bread_loop
+
+# List all agents
+defty agent list
+
+# Show details
+defty agent info bread_loop
+```
+
+#### .defty File Format
+
+Agents are defined using `.defty` files -- a restricted Python syntax that is safe to share:
+
+```python
+# bread_loop.defty
+name = "bread_loop"
+version = "1.0"
+robot = "so101"
+
+tree = Repeat(
+    times=-1,  # infinite loop
+    child=Sequence(
+        ACTPolicy("models/act_bread_pick"),   # pick bread from plate
+        Wait(seconds=2),
+        ACTPolicy("models/act_bread_place"),  # place bread back
+        Wait(seconds=2),
+    )
+)
+```
+
+**Security:** `.defty` files are parsed with AST validation -- no imports, no function/class
+definitions, no attribute access. Only node constructors and basic literals are allowed.
+
+#### Built-in Nodes
+
+| Category | Nodes | Description |
+|----------|-------|-------------|
+| **Control** | `Sequence`, `Selector`, `Repeat`, `Parallel` | Flow control |
+| **Perception** | `CameraCapture` | Read all camera frames into context |
+| **Motion** | `JointControl`, `GripperOpen`, `GripperClose`, `RelativeMove` | Direct hardware control |
+| **Policy** | `ACTPolicy` | Run trained models (ACT, Diffusion, VQBet) |
+| **Utility** | `Wait`, `Condition` | Timing and conditional branching |
+| **Composition** | `Agent("name")` | Load another .defty as a sub-tree |
 
 ---
 
