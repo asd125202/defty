@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-03-18
+
+### Fixed
+
+- **`defty health` / `defty status` arm checks broken** — `FeetechMotorsBus.__init__()`
+  API changed to require a `motors` parameter; replaced direct instantiation with
+  `FeetechMotorsBus.scan_port()` which probes the port without prior motor config.
+- **`defty health` / `defty status` camera checks broken on Windows** — still used
+  `CAP_MSMF` backend which was reverted everywhere else in v0.2.1; now uses
+  `cv2.VideoCapture(dev_arg)` (CAP_ANY) matching the rest of the codebase.
+
 ## [0.2.1] — 2026-03-18
 
 ### Fixed

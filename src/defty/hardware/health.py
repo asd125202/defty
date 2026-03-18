@@ -122,35 +122,28 @@ def check_arm_health(arm_config: dict[str, Any]) -> ArmHealthReport:
     if not port:
         return ArmHealthReport(arm_id=arm_id, port="", reachable=False, error="No port configured")
 
+    motor_names = SO101_MOTOR_NAMES if robot_type == "so101" else {i: f"motor_{i}" for i in range(1, 7)}
+
     try:
         from lerobot.motors.feetech import FeetechMotorsBus
 
-        bus = FeetechMotorsBus(port=port)
-        bus.connect()
+        # scan_port probes the port without requiring motor config upfront
+        scan_result = FeetechMotorsBus.scan_port(port)
     except Exception as exc:
         logger.warning("Cannot open serial port %s: %s", port, exc)
         return ArmHealthReport(arm_id=arm_id, port=port, reachable=False, error=str(exc))
 
-    motor_names = SO101_MOTOR_NAMES if robot_type == "so101" else {i: f"motor_{i}" for i in range(1, 7)}
+    # Collect all responding motor IDs across baud rates
+    found_ids: set[int] = set()
+    for _baud, ids in scan_result.items():
+        found_ids.update(ids)
 
     motors: list[MotorStatus] = []
-    try:
-        ping_result = bus.broadcast_ping()
-        found_ids = set(ping_result.keys()) if ping_result else set()
-
-        for mid, name in motor_names.items():
-            if mid in found_ids:
-                motors.append(MotorStatus(motor_id=mid, name=name, online=True, model_number=ping_result.get(mid)))
-            else:
-                motors.append(MotorStatus(motor_id=mid, name=name, online=False, error="No response"))
-    except Exception as exc:
-        logger.warning("Broadcast ping failed on %s: %s", port, exc)
-        return ArmHealthReport(arm_id=arm_id, port=port, reachable=True, error=str(exc))
-    finally:
-        try:
-            bus.disconnect()
-        except Exception:
-            pass
+    for mid, name in motor_names.items():
+        if mid in found_ids:
+            motors.append(MotorStatus(motor_id=mid, name=name, online=True))
+        else:
+            motors.append(MotorStatus(motor_id=mid, name=name, online=False, error="No response"))
 
     return ArmHealthReport(arm_id=arm_id, port=port, reachable=True, motors=motors)
 
@@ -177,13 +170,7 @@ def check_camera_health(camera_config: dict[str, Any]) -> CameraHealthReport:
         import cv2
 
         dev_arg: int | str = int(device) if device.isdigit() else device
-        # MSMF (Media Foundation) handles index-based access reliably on
-        # modern Windows; CAP_ANY may try the obsensor UVC driver first
-        # and fail for standard USB cameras.
-        import platform as _plat
-
-        backend = cv2.CAP_MSMF if _plat.system() == "Windows" else cv2.CAP_ANY
-        cap = cv2.VideoCapture(dev_arg, backend)
+        cap = cv2.VideoCapture(dev_arg)
         if not cap.isOpened():
             return CameraHealthReport(camera_id=camera_id, device=device, online=False, error="Cannot open device")
 
