@@ -976,11 +976,30 @@ def _read_dataset_task(dataset_dir: Path) -> str:
 @click.option(
     "--model-name", default=None, help="Model name for output dir under models/. Auto-generated if omitted."
 )
-@click.option("--steps", default=None, type=int, help="Total training steps (default: 100000).")
+@click.option("--steps", default=None, type=int, help="Total training steps (default: 10000).")
 @click.option("--batch-size", default=None, type=int, help="Training batch size.")
 @click.option("--lr", default=None, type=float, help="Learning rate.")
 @click.option("--push-to-hub", is_flag=True, help="Push trained model to HuggingFace Hub.")
-def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to_hub) -> None:
+@click.option(
+    "--from-model",
+    default=None,
+    metavar="MODEL",
+    help=(
+        "Fine-tune from an existing model.  Loads the named model's weights and "
+        "architecture, then trains in a new output directory on DATASET_NAME."
+    ),
+)
+@click.option(
+    "--resume-model",
+    default=None,
+    metavar="MODEL",
+    help=(
+        "Resume a stopped training run.  Continues from the latest checkpoint of "
+        "the named model in-place.  Optionally override --steps for more training."
+    ),
+)
+def train(path, policy, dataset_name, model_name, steps, batch_size, lr,
+          push_to_hub, from_model, resume_model) -> None:
     """Train a policy on a recorded dataset.
 
     Uses LeRobot's training pipeline with ACT, Diffusion, or other policies.
@@ -990,23 +1009,37 @@ def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to
     Example:
 
     \b
-        defty train                               # latest dataset, ACT policy
-        defty train --dataset-name test_001        # specific dataset
+        defty train                                         # latest dataset, ACT policy
+        defty train --dataset-name test_001                 # specific dataset
         defty train --policy diffusion --steps 50000
-        defty train --model-name my_experiment     # explicit model name
+        defty train --model-name my_experiment              # explicit model name
+        defty train --from-model act_test_001               # fine-tune from existing model
+        defty train --from-model act_test_001 --dataset-name test_002  # fine-tune on new data
+        defty train --resume-model act_test_001             # resume stopped run
+        defty train --resume-model act_test_001 --steps 20000  # resume + more steps
     """
     from defty.training.trainer import train as do_train
 
     yaml_path, _project = _ensure_project(path)
 
+    if from_model and resume_model:
+        click.echo("Error: Specify only one of --from-model or --resume-model, not both.", err=True)
+        sys.exit(1)
+
     # ── Banner ────────────────────────────────────────────────────────────────
     ds_label = dataset_name or "(latest)"
     model_label = model_name or "(auto)"
     sep = "═" * 55
+    if resume_model:
+        mode_line = f"  Mode     : resume {resume_model}"
+    elif from_model:
+        mode_line = f"  Mode     : fine-tune from {from_model}"
+    else:
+        mode_line = f"  Policy   : {policy}"
     click.echo(f"""
 {sep}
   defty train
-  Policy   : {policy}
+{mode_line}
   Dataset  : {ds_label}
   Model    : {model_label}
   Steps    : {steps or "default (10k)"}
@@ -1022,8 +1055,10 @@ def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to
             batch_size=batch_size,
             learning_rate=lr,
             push_to_hub=push_to_hub,
+            from_model=from_model,
+            resume_model=resume_model,
         )
-    except (FileNotFoundError, RuntimeError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 

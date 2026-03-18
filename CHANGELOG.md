@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`defty train --from-model MODEL`** — fine-tune from an existing trained model.
+  Loads the source model's architecture and weights via `pretrained_path`, then
+  trains in a new auto-numbered output directory on any dataset.  Output names are
+  auto-generated as `<source>_ft_<dataset>_001`, etc.
+- **`defty train --resume-model MODEL`** — resume a stopped training run in-place.
+  Continues from the latest checkpoint of the named model, restoring step counter
+  and optimizer state.  Optionally combine with `--steps N` to extend total steps.
+
 ## [0.2.4] — 2026-03-18
 
 ### Fixed
