@@ -431,8 +431,14 @@ Google Cloud (Vertex AI) and Azure ML providers are available as scaffolds.
 defty agent create bread_loop
 
 # Edit the generated .defty file (~/.defty/agents/bread_loop/bread_loop.defty)
-# Then run it
+# Then run it (auto-detects hardware from project.yaml)
 defty agent run bread_loop
+
+# Run with explicit port (no project needed)
+defty agent run bread_loop --port COM4
+
+# Test agent logic without hardware
+defty agent run bread_loop --no-hardware
 
 # List all agents
 defty agent list
@@ -440,6 +446,13 @@ defty agent list
 # Show details
 defty agent info bread_loop
 ```
+
+| Option | Flag | Description |
+|--------|------|-------------|
+| Frequency | `-f, --frequency` | Tick frequency in Hz (default: 30) |
+| Port | `--port` | Serial port for robot arm (auto-detected if omitted) |
+| Project | `-p, --path` | Path to project.yaml (default: find in cwd/parents) |
+| No hardware | `--no-hardware` | Run agent without connecting hardware (test mode) |
 
 #### .defty File Format
 

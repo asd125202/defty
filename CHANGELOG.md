@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-03-18
+
+### Fixed
+
+- **`defty agent run` not connecting hardware** — agent runner now auto-detects
+  project configuration (follower arm + cameras) from `project.yaml` in the
+  current or parent directory. Previously required explicit `--port` flag.
+- **SO-101 interface camera backend** — changed from DSHOW (Windows-specific)
+  to CAP_ANY (default) for consistency with `recorder.py`.
+
+### Added
+
+- `defty agent run --path` option — specify path to `project.yaml` explicitly.
+- `defty agent run --no-hardware` flag — run agent without connecting hardware
+  (useful for testing tree logic).
+
 ## [0.2.3] — 2026-03-18
 
 ### Fixed

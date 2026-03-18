@@ -103,9 +103,7 @@ def _ensure_project(path: str | None = None) -> tuple[Path, dict[str, Any]]:
         click.echo("Aborted.")
         sys.exit(0)
     else:
-        click.echo(
-            "Error: No project.yaml found. Run 'defty init' first.", err=True
-        )
+        click.echo("Error: No project.yaml found. Run 'defty init' first.", err=True)
         sys.exit(1)
 
 
@@ -258,7 +256,11 @@ def scan_find_port() -> None:
 
 
 @scan.command("cameras")
-@click.option("--preview", is_flag=True, help="Live ASCII art stream from each camera (press q to advance, Ctrl+C to quit).")
+@click.option(
+    "--preview",
+    is_flag=True,
+    help="Live ASCII art stream from each camera (press q to advance, Ctrl+C to quit).",
+)
 def scan_cameras(preview: bool) -> None:
     """List all connected cameras with fingerprint data.
 
@@ -291,6 +293,7 @@ def _camera_ascii_stream(index: int, width: int = 80) -> None:
     # Enable ANSI escape codes on Windows (required for cursor movement)
     if sys.platform == "win32":
         import ctypes
+
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
         mode = ctypes.c_ulong()
@@ -338,12 +341,14 @@ def _camera_ascii_stream(index: int, width: int = 80) -> None:
             # Non-blocking key check
             if sys.platform == "win32":
                 import msvcrt
+
                 if msvcrt.kbhit():
                     ch = msvcrt.getch()
                     if ch.lower() in (b"q", b"\x1b"):
                         break
             else:
                 import select, tty, termios
+
                 fd = sys.stdin.fileno()
                 old = termios.tcgetattr(fd)
                 try:
@@ -394,8 +399,15 @@ def setup_add_arm(port, role, robot_type, arm_id, label, hardware_id, path) -> N
                 break
 
     try:
-        add_arm(project, arm_id=arm_id, port=port, hardware_id=hardware_id,
-                robot_type=robot_type, role=role, label=label)
+        add_arm(
+            project,
+            arm_id=arm_id,
+            port=port,
+            hardware_id=hardware_id,
+            robot_type=robot_type,
+            role=role,
+            label=label,
+        )
     except ValueError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -429,8 +441,16 @@ def setup_add_camera(device, position, camera_id, hardware_id, width, height, fp
             click.echo(f"Auto-detected hardware_id: {hardware_id}")
 
     try:
-        add_camera(project, camera_id=camera_id, device=device, hardware_id=hardware_id,
-                   position=position, width=width, height=height, fps=fps)
+        add_camera(
+            project,
+            camera_id=camera_id,
+            device=device,
+            hardware_id=hardware_id,
+            position=position,
+            width=width,
+            height=height,
+            fps=fps,
+        )
     except ValueError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -475,21 +495,32 @@ def setup_calibrate(arm_id, path) -> None:
     try:
         # Apply motor stability patches before creating any motor bus
         from defty.recording.recorder import _apply_motor_stability_patches
+
         _apply_motor_stability_patches()
 
         if robot_type in ("so101", "so100") and role == "follower":
             from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
-            robot = SOFollower(SOFollowerRobotConfig(
-                port=port, id=arm_id, calibration_dir=calibration_dir,
-            ))
+
+            robot = SOFollower(
+                SOFollowerRobotConfig(
+                    port=port,
+                    id=arm_id,
+                    calibration_dir=calibration_dir,
+                )
+            )
             robot.connect(calibrate=False)
             robot.calibrate()
             robot.disconnect()
         elif robot_type in ("so101", "so100") and role == "leader":
             from lerobot.teleoperators.so_leader import SOLeader, SOLeaderTeleopConfig
-            leader = SOLeader(SOLeaderTeleopConfig(
-                port=port, id=arm_id, calibration_dir=calibration_dir,
-            ))
+
+            leader = SOLeader(
+                SOLeaderTeleopConfig(
+                    port=port,
+                    id=arm_id,
+                    calibration_dir=calibration_dir,
+                )
+            )
             leader.connect(calibrate=False)
             leader.calibrate()
             leader.disconnect()
@@ -657,9 +688,7 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 
     for arm in (leader_arm, follower_arm):
         if not arm.get("port"):
-            click.echo(
-                f"Error: Arm '{arm['id']}' has no port. Run 'defty setup update'.", err=True
-            )
+            click.echo(f"Error: Arm '{arm['id']}' has no port. Run 'defty setup update'.", err=True)
             sys.exit(1)
 
     calibration_dir = yaml_path.parent / "calibration"
@@ -675,23 +704,30 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 
     # Apply motor stability patches before creating any motor bus
     from defty.recording.recorder import _apply_motor_stability_patches
+
     _apply_motor_stability_patches()
 
-    teleop = SOLeader(SOLeaderTeleopConfig(
-        port=leader_arm["port"],
-        id=leader_arm["id"],
-        calibration_dir=calibration_dir,
-    ))
-    robot = SOFollower(SOFollowerRobotConfig(
-        port=follower_arm["port"],
-        id=follower_arm["id"],
-        calibration_dir=calibration_dir,
-    ))
+    teleop = SOLeader(
+        SOLeaderTeleopConfig(
+            port=leader_arm["port"],
+            id=leader_arm["id"],
+            calibration_dir=calibration_dir,
+        )
+    )
+    robot = SOFollower(
+        SOFollowerRobotConfig(
+            port=follower_arm["port"],
+            id=follower_arm["id"],
+            calibration_dir=calibration_dir,
+        )
+    )
 
     teleop_action_proc, robot_action_proc, robot_obs_proc = make_default_processors()
 
-    click.echo(f"Teleoperate  leader={leader_arm['id']} ({leader_arm['port']})  "
-               f"→  follower={follower_arm['id']} ({follower_arm['port']})")
+    click.echo(
+        f"Teleoperate  leader={leader_arm['id']} ({leader_arm['port']})  "
+        f"→  follower={follower_arm['id']} ({follower_arm['port']})"
+    )
     click.echo(f"FPS: {fps}   Duration: {f'{duration}s' if duration else 'until Ctrl+C'}")
     click.echo("Press Ctrl+C to stop.")
 
@@ -700,6 +736,7 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
         try:
             from defty.utils import spawn_rerun_detached
             import rerun as rr
+
             _rerun_proc = spawn_rerun_detached()
             if _rerun_proc is not None:
                 rr.init("defty-teleoperate", spawn=False)
@@ -731,6 +768,7 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
         if display:
             try:
                 import rerun as rr
+
                 rr.disconnect()
             except Exception:
                 pass
@@ -748,16 +786,24 @@ def teleoperate(leader_id, follower_id, fps, duration, display, path) -> None:
 
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
-@click.option("--episodes", "-e", default=1, type=int, show_default=True, help="Number of episodes to record.")
+@click.option(
+    "--episodes", "-e", default=1, type=int, show_default=True, help="Number of episodes to record."
+)
 @click.option("--fps", default=None, type=int, help="Override recording FPS.")
 @click.option("--task", default=None, help="One-line task description, e.g. 'Pick the red cube'.")
 @click.option("--dataset-name", default=None, help="Dataset name / HuggingFace repo_id.")
 @click.option("--episode-time", default=60.0, type=float, show_default=True, help="Seconds per episode.")
-@click.option("--reset-time", default=60.0, type=float, show_default=True, help="Seconds to reset between episodes.")
+@click.option(
+    "--reset-time", default=60.0, type=float, show_default=True, help="Seconds to reset between episodes."
+)
 @click.option("--display", is_flag=True, help="Show camera feeds via Rerun.")
 @click.option("--push-to-hub", is_flag=True, help="Push dataset to HuggingFace Hub.")
-@click.option("--resume", is_flag=True, help="Append episodes to an existing dataset instead of creating a new one.")
-def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, display, push_to_hub, resume) -> None:
+@click.option(
+    "--resume", is_flag=True, help="Append episodes to an existing dataset instead of creating a new one."
+)
+def record(
+    path, episodes, fps, task, dataset_name, episode_time, reset_time, display, push_to_hub, resume
+) -> None:
     """Record teleoperation episodes.
 
     Uses the leader arm to control the follower arm and records the
@@ -902,6 +948,7 @@ def _read_dataset_task(dataset_dir: Path) -> str:
         return "—"
     try:
         import pyarrow.parquet as pq
+
         table = pq.read_table(tasks_file)
         tasks = table.to_pydict().get("task", [])
         if tasks:
@@ -917,12 +964,18 @@ def _read_dataset_task(dataset_dir: Path) -> str:
 @main.command()
 @click.option("--path", "-p", default=None, hidden=True, help="Path to project.yaml.")
 @click.option(
-    "--policy", default="act", show_default=True,
+    "--policy",
+    default="act",
+    show_default=True,
     type=click.Choice(["act", "diffusion", "tdmpc", "vqbet"], case_sensitive=False),
     help="Policy architecture.",
 )
-@click.option("--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted.")
-@click.option("--model-name", default=None, help="Model name for output dir under models/. Auto-generated if omitted.")
+@click.option(
+    "--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted."
+)
+@click.option(
+    "--model-name", default=None, help="Model name for output dir under models/. Auto-generated if omitted."
+)
 @click.option("--steps", default=None, type=int, help="Total training steps (default: 100000).")
 @click.option("--batch-size", default=None, type=int, help="Training batch size.")
 @click.option("--lr", default=None, type=float, help="Learning rate.")
@@ -956,7 +1009,7 @@ def train(path, policy, dataset_name, model_name, steps, batch_size, lr, push_to
   Policy   : {policy}
   Dataset  : {ds_label}
   Model    : {model_label}
-  Steps    : {steps or 'default (10k)'}
+  Steps    : {steps or "default (10k)"}
 {sep}
 """)
     try:
@@ -1068,7 +1121,9 @@ def models(path) -> None:
 
 @main.command()
 @click.option("--path", "-p", default=None, hidden=True, help="Path to project.yaml.")
-@click.option("--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted.")
+@click.option(
+    "--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted."
+)
 @click.option("--episode", "-e", default=0, type=int, show_default=True, help="Episode index to replay.")
 @click.option("--save", is_flag=True, help="Save replay as .rrd file instead of live viewing.")
 def replay(path, dataset_name, episode, save) -> None:
@@ -1098,6 +1153,7 @@ def replay(path, dataset_name, episode, save) -> None:
     # Resolve dataset name
     if dataset_name is None:
         from defty.recording.recorder import _latest_dataset
+
         dataset_name = _latest_dataset(data_dir)
         if dataset_name is None:
             click.echo("Error: No valid datasets found. Run 'defty record' first.", err=True)
@@ -1211,10 +1267,12 @@ def hardware_import(source_path, path) -> None:
     existing_arm_ids = {a["id"] for a in arms}
     existing_cam_ids = {c["id"] for c in cameras}
 
-    added_arms = sum(1 for a in source_hw.get("arms", [])
-                     if a["id"] not in existing_arm_ids and not arms.append(a))
-    added_cams = sum(1 for c in source_hw.get("cameras", [])
-                     if c["id"] not in existing_cam_ids and not cameras.append(c))
+    added_arms = sum(
+        1 for a in source_hw.get("arms", []) if a["id"] not in existing_arm_ids and not arms.append(a)
+    )
+    added_cams = sum(
+        1 for c in source_hw.get("cameras", []) if c["id"] not in existing_cam_ids and not cameras.append(c)
+    )
 
     save_project(yaml_path, project)
     click.echo(f"Imported {added_arms} arm(s) and {added_cams} camera(s) from {source}")
@@ -1234,8 +1292,9 @@ def hardware_import(source_path, path) -> None:
 @click.option("--episode-time", default=60.0, type=float, help="Max seconds per episode.")
 @click.option("--reset-time", default=10.0, type=float, help="Seconds between episodes for reset.")
 @click.option("--path", "-p", default=None, hidden=True)
-def run(model_name, episodes, display, vision, record, dataset_name, fps,
-        episode_time, reset_time, path) -> None:
+def run(
+    model_name, episodes, display, vision, record, dataset_name, fps, episode_time, reset_time, path
+) -> None:
     """Run a trained policy on the robot.
 
     Loads a model from ``models/<name>/`` and executes it on the robot
@@ -1717,9 +1776,25 @@ def agent_create(name: str, robot: str) -> None:
 @agent.command("run")
 @click.argument("name")
 @click.option("--frequency", "-f", default=30, type=int, help="Tick frequency in Hz.")
-@click.option("--port", default=None, help="Serial port for robot arm.")
-def agent_run(name: str, frequency: int, port: str | None) -> None:
-    """Parse and run a .defty agent."""
+@click.option(
+    "--port", default=None, help="Serial port for robot arm (auto-detected from project if omitted)."
+)
+@click.option(
+    "--path", "-p", default=None, help="Path to project.yaml (default: find in current/parent dirs)."
+)
+@click.option("--no-hardware", is_flag=True, help="Run agent without connecting to any hardware.")
+def agent_run(name: str, frequency: int, port: str | None, path: str | None, no_hardware: bool) -> None:
+    """Parse and run a .defty agent.
+
+    By default, hardware is auto-detected from project.yaml in the current or
+    parent directory.  The follower arm and all cameras are connected.
+
+    \b
+    Examples:
+        defty agent run my_agent                    # auto-detect hardware from project
+        defty agent run my_agent --port COM4        # explicit port, no cameras
+        defty agent run my_agent --no-hardware      # run without hardware (test mode)
+    """
     from defty.agents.manager import AgentManager
     from defty.nodes.base import Context
     from defty.nodes.engine import BehaviorTreeRunner
@@ -1735,16 +1810,75 @@ def agent_run(name: str, frequency: int, port: str | None) -> None:
 
     ctx = Context(language=definition.get("language", ""))
 
-    if port and robot_type == "so101":
-        try:
-            from defty.nodes.robots.so101 import LeRobotSO101Interface
+    # Try to auto-detect hardware from project config
+    if not no_hardware and robot_type == "so101":
+        # Apply motor stability patches before creating any motor bus
+        from defty.recording.recorder import _apply_motor_stability_patches
 
-            robot = LeRobotSO101Interface(port=port)
-            robot.connect()
-            ctx.robot = robot
-            click.echo(f"Connected to SO-101 on {port}")
-        except Exception as exc:
-            click.echo(f"Warning: Could not connect robot: {exc}", err=True)
+        _apply_motor_stability_patches()
+
+        follower_port = port
+        cameras_config: dict = {}
+        calibration_dir = Path("calibration")  # default
+
+        # Try to load project config for hardware info
+        if not port:
+            try:
+                from defty.project import find_project_root, load_project
+
+                yaml_path = find_project_root(Path(path) if path else Path.cwd())
+                project = load_project(yaml_path)
+                hw = project.get("hardware", {})
+                arms = hw.get("arms", [])
+                cameras = hw.get("cameras", [])
+
+                # Find follower arm
+                followers = [a for a in arms if a.get("role") == "follower"]
+                if followers:
+                    follower = followers[0]
+                    follower_port = follower.get("port")
+                    click.echo(f"Found follower arm: {follower['id']} on {follower_port}")
+                else:
+                    click.echo(
+                        "Warning: No follower arm in project. Run 'defty setup add-arm --role follower'.",
+                        err=True,
+                    )
+
+                # Build cameras config
+                for cam in cameras:
+                    cam_id = cam.get("id", "camera")
+                    cameras_config[cam_id] = {
+                        "device": cam.get("device", "0"),
+                        "width": cam.get("width", 640),
+                        "height": cam.get("height", 480),
+                        "fps": cam.get("fps", 30),
+                    }
+                if cameras_config:
+                    click.echo(f"Found {len(cameras_config)} camera(s): {', '.join(cameras_config.keys())}")
+
+                calibration_dir = yaml_path.parent / "calibration"
+            except (FileNotFoundError, ValueError) as exc:
+                click.echo(f"Warning: Could not load project config: {exc}", err=True)
+                click.echo(
+                    "  Run inside a project directory or use --port to specify arm manually.", err=True
+                )
+
+        if follower_port:
+            try:
+                from defty.nodes.robots.so101 import LeRobotSO101Interface
+
+                robot = LeRobotSO101Interface(
+                    port=follower_port,
+                    calibration_dir=calibration_dir,
+                    cameras=cameras_config,
+                )
+                robot.connect()
+                ctx.robot = robot
+                click.echo(f"Connected to SO-101 on {follower_port}")
+            except Exception as exc:
+                click.echo(f"Warning: Could not connect robot: {exc}", err=True)
+        else:
+            click.echo("Warning: No port specified and no follower arm found in project.", err=True)
 
     click.echo(f"Running agent '{name}' at {frequency} Hz  (Ctrl+C to stop)")
     runner = BehaviorTreeRunner(tree, ctx, frequency=frequency)
@@ -1797,7 +1931,6 @@ def agent_info(name: str) -> None:
         click.echo(f"\nTree:\n{info['tree_structure']}")
 
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -1814,7 +1947,9 @@ def _detect_nvidia_gpu() -> bool:
     try:
         result = subprocess.run(
             [nvsmi, "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         name = (result.stdout or "").strip()
         if result.returncode == 0 and name:

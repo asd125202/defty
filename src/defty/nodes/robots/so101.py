@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 import logging
-import platform
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +41,13 @@ class LeRobotSO101Interface(RobotInterface):
         cameras: Mapping of camera id to camera config dict.
     """
 
-    def __init__(self, port: str, arm_id: str = "so101_follower_1", calibration_dir: str | Path = "calibration", cameras: dict[str, dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        port: str,
+        arm_id: str = "so101_follower_1",
+        calibration_dir: str | Path = "calibration",
+        cameras: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         self.port = port
         self.arm_id = arm_id
         self.calibration_dir = Path(calibration_dir)
@@ -52,7 +57,6 @@ class LeRobotSO101Interface(RobotInterface):
     def connect(self) -> None:
         """Establish a connection to the SO-101 robot arm."""
         try:
-            from lerobot.cameras.configs import Cv2Backends
             from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
             from lerobot.robots.so_follower import SOFollowerRobot, SOFollowerRobotConfig
         except ImportError as exc:
@@ -61,9 +65,16 @@ class LeRobotSO101Interface(RobotInterface):
         for cam_id, cam in self.cameras_config.items():
             device = cam.get("device", "0")
             idx = int(device) if str(device).isdigit() else device
-            backend = Cv2Backends.DSHOW if platform.system() == "Windows" else Cv2Backends.ANY
-            camera_configs[cam_id] = OpenCVCameraConfig(index_or_path=idx, width=cam.get("width", 640), height=cam.get("height", 480), fps=cam.get("fps", 30), backend=backend)
-        config = SOFollowerRobotConfig(port=self.port, id=self.arm_id, calibration_dir=self.calibration_dir, cameras=camera_configs)
+            # Use default backend (CAP_ANY) — consistent with recorder.py
+            camera_configs[cam_id] = OpenCVCameraConfig(
+                index_or_path=idx,
+                width=cam.get("width", 640),
+                height=cam.get("height", 480),
+                fps=cam.get("fps", 30),
+            )
+        config = SOFollowerRobotConfig(
+            port=self.port, id=self.arm_id, calibration_dir=self.calibration_dir, cameras=camera_configs
+        )
         self._robot = SOFollowerRobot(config)
         self._robot.connect()
         logger.info("Connected to SO-101 on %s", self.port)
