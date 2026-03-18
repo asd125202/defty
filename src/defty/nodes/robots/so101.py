@@ -58,7 +58,7 @@ class LeRobotSO101Interface(RobotInterface):
         """Establish a connection to the SO-101 robot arm."""
         try:
             from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-            from lerobot.robots.so_follower import SOFollowerRobot, SOFollowerRobotConfig
+            from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
         except ImportError as exc:
             raise RuntimeError(f"LeRobot import failed: {exc}") from exc
         camera_configs: dict[str, Any] = {}
@@ -78,7 +78,7 @@ class LeRobotSO101Interface(RobotInterface):
             calibration_dir=self.calibration_dir,
             cameras=camera_configs,
         )
-        self._robot = SOFollowerRobot(config)
+        self._robot = SOFollower(config)
         self._robot.connect()
         logger.info("Connected to SO-101 on %s", self.port)
 
