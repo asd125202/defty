@@ -40,7 +40,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cuda = ["torch>=2.3.0"]  # activates pytorch-cu124 index via [tool.uv.sources] marker
+# CPU-only override for systems without NVIDIA GPU (e.g. cloud CI, Mac Intel)
+# Usage: uv tool install "defty[cpu] @ git+..."
+cpu = ["torch>=2.3.0"]
 cloud-google = [
     "google-cloud-aiplatform>=1.38.0",
 ]
@@ -67,13 +69,10 @@ issues = "https://github.com/asd125202/defty/issues"
 where = ["src"]
 
 # ── uv configuration ──────────────────────────────────────────────────────────
-# uv selects the correct torch wheel based on the platform:
-#   - NVIDIA GPU  → torch with CUDA (cu121 or cu124)
-#   - Apple Silicon → torch with MPS (standard PyPI wheel works)
-#   - CPU-only    → lightweight torch+cpu wheel
-#
-# Users with NVIDIA GPUs should run:
-#   uv sync --extra cuda
+# Torch wheel selection by platform:
+#   Windows / Linux  → CUDA 12.4 wheel by default (GPU training ready)
+#   macOS            → standard PyPI wheel (MPS support built in)
+#   CPU-only override → uv tool install "defty[cpu] @ git+..."
 #
 # uv index docs: https://docs.astral.sh/uv/guides/package-indexes/
 
@@ -93,11 +92,12 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
-# Default: CPU wheel (works everywhere, used during `uv tool install`)
-# Override in uv.toml or pass --extra cuda for GPU training
+# Default on Windows/Linux: CUDA 12.4 (torch+cu124).
+# macOS: no source override → PyPI standard wheel (supports MPS).
+# CPU-only override: install with [cpu] extra.
 torch = [
-    { index = "pytorch-cu124", marker = "extra == 'cuda'" },
-    { index = "pytorch-cpu",   marker = "extra != 'cuda'" },
+    { index = "pytorch-cu124", marker = "sys_platform != 'darwin' and extra != 'cpu'" },
+    { index = "pytorch-cpu",   marker = "extra == 'cpu'" },
 ]
 
 # ── Ruff ─────────────────────────────────────────────────────────────────────
