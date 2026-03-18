@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,26 @@ def train(
         from lerobot.configs.train import TrainPipelineConfig
     except ImportError as exc:
         raise RuntimeError(f"LeRobot not available: {exc}") from exc
+
+    # Authenticate with Hugging Face so gated model downloads succeed.
+    # The token is read from (in priority order):
+    #   1. HF_TOKEN env var  2. ~/.defty/config.yaml  3. HF CLI cache
+    try:
+        from defty.cloud.config import get_hf_token
+
+        _hf_token = get_hf_token()
+        if _hf_token:
+            os.environ["HF_TOKEN"] = _hf_token
+            try:
+                from huggingface_hub import login as hf_login
+                hf_login(token=_hf_token, add_to_git_credential=False)
+                logger.info("Authenticated with Hugging Face for model downloads")
+            except Exception as exc:
+                logger.debug("huggingface_hub.login() failed: %s", exc)
+        else:
+            logger.debug("No HF token found; gated models may be inaccessible")
+    except ImportError:
+        logger.debug("defty.cloud.config not available; skipping HF auth")
 
     # Build config
     dataset_cfg = DatasetConfig(
