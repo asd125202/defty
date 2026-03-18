@@ -227,7 +227,6 @@ def run(
                     "OpenCV camera config unavailable; skipping camera %s",
                     cam.get("id"),
                 )
-                )
 
     follower_cfg = SOFollowerRobotConfig(
         port=follower["port"],
