@@ -113,6 +113,21 @@ pre-commit install
 5. Add a doc page at `docs/api/motors.md` (extend the existing file).
 6. Update `STRUCTURE.md` and `CHANGELOG.md`.
 
+### 6. Versioning
+
+Defty uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
+
+- **MAJOR**: Breaking changes to CLI interface or config format
+- **MINOR**: New features, new commands, new hardware support
+- **PATCH**: Bug fixes, documentation updates
+
+When bumping the version, update **both** files in the same commit:
+1. `pyproject.toml` — `version = "X.Y.Z"`
+2. `src/defty/__version__.py` — `__version__ = "X.Y.Z"`
+
+The `defty version` command shows the installed version and environment info.
+The `defty --version` flag shows the version number only.
+
 ---
 
 ## Pull Request Checklist
@@ -121,6 +136,7 @@ pre-commit install
 - [ ] Module, class, and function docstrings present
 - [ ] `__all__` updated in relevant `__init__.py` files
 - [ ] `CHANGELOG.md` entry added under `[Unreleased]`
+- [ ] Version bumped in `pyproject.toml` and `src/defty/__version__.py` (if releasing)
 - [ ] `STRUCTURE.md` updated if new files/dirs were added
 - [ ] `SETUP.md` updated if the setup procedure changed
 - [ ] `ruff check` and `ruff format` pass with no errors
