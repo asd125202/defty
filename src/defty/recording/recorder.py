@@ -291,6 +291,7 @@ def record(
         push_to_hub=push_to_hub,
         episode_time_s=episode_time_s,
         reset_time_s=reset_time_s,
+        streaming_encoding=True,
     )
 
     # Pre-spawn Rerun viewer as a fully detached process so Ctrl+C during
