@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cloud Upload** — upload recorded datasets to Hugging Face Hub
+  - `defty cloud setup` — configure HF API token (stored in `~/.defty/config.yaml`)
+  - `defty cloud status` — show cloud configuration and provider status
+  - `defty cloud upload` — upload dataset directory to HF Hub with progress display
+  - Post-record upload prompt: after `defty record`, asks to upload to Hub
+  - Interactive token prompt if not configured when uploading
+- **Cloud Training** — train models on cloud GPUs
+  - `defty cloud train` — launch training on HF Spaces, Google Vertex AI, or Azure ML
+  - `defty cloud check` — check cloud training job status
+  - Abstract `CloudTrainer` interface with provider registry
+  - HuggingFaceTrainer: creates HF Spaces with Docker for training
+  - GoogleVertexTrainer: scaffold for Vertex AI custom training jobs
+  - AzureMLTrainer: scaffold for Azure ML custom training jobs
+- `src/defty/cloud/` module — config, uploader, and trainer submodules
+- `huggingface-hub>=0.20.0` added to core dependencies
+- `[cloud-google]` and `[cloud-azure]` optional dependency groups
+
+### Added
+
 - **`SPEC.md`** — comprehensive project specification: vision, node system architecture,
   six Physical AI paths, agent concept, file formats, and Alpha roadmap (M0–M5)
 - **`defty run` command** — run a trained policy on the robot autonomously

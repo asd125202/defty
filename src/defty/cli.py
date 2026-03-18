@@ -335,7 +335,7 @@ def _camera_ascii_stream(index: int, width: int = 80) -> None:
         kernel32.GetConsoleMode(handle, ctypes.byref(mode))
         kernel32.SetConsoleMode(handle, mode.value | 4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
 
-    cap = cv2.VideoCapture(index, cv2.CAP_MSMF if sys.platform == "win32" else cv2.CAP_ANY)
+    cap = cv2.VideoCapture(index)
     if not cap.isOpened():
         click.echo(f"  (could not open camera {index})")
         return
@@ -844,6 +844,27 @@ def record(path, episodes, fps, task, dataset_name, episode_time, reset_time, di
     except (FileNotFoundError, RuntimeError) as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+
+    # ── Post-record upload prompt ─────────────────────────────────────────────
+    if not push_to_hub and sys.stdin.isatty():
+        try:
+            if click.confirm("\n☁  Upload this dataset to Hugging Face Hub?", default=False):
+                from defty.cloud.uploader import upload_dataset
+
+                yaml_path, proj = _ensure_project(path)
+                data_dir = yaml_path.parent / "data"
+                from defty.recording.recorder import _latest_dataset
+
+                latest = _latest_dataset(data_dir) if data_dir.exists() else None
+                if latest:
+                    try:
+                        upload_dataset(data_dir / latest, interactive=True)
+                    except Exception as upload_exc:
+                        click.echo(f"Upload failed: {upload_exc}", err=True)
+                else:
+                    click.echo("No dataset found to upload.", err=True)
+        except click.Abort:
+            pass  # user pressed Ctrl+C — skip silently
 
 
 # ── defty datasets ───────────────────────────────────────────────────────────
@@ -1381,6 +1402,240 @@ def uninstall() -> None:
     click.echo("To also remove uv:")
     click.echo("  Linux/macOS:  rm ~/.local/bin/uv ~/.local/bin/uvx")
     click.echo("  Windows:      Remove-Item $env:USERPROFILE\\.local\\bin\\uv.exe")
+
+
+# ── defty cloud ──────────────────────────────────────────────────────────────
+
+
+@main.group()
+def cloud() -> None:
+    """Cloud services — upload datasets and train models remotely.
+
+    \b
+    Examples:
+        defty cloud setup          # configure Hugging Face API token
+        defty cloud status         # show current cloud configuration
+        defty cloud upload         # upload latest dataset to HF Hub
+        defty cloud train          # start cloud training job
+        defty cloud check JOB_ID   # check training job status
+    """
+
+
+@cloud.command("setup")
+@click.option("--token", "-t", default=None, help="Hugging Face API token (hf_...).")
+def cloud_setup(token: str | None) -> None:
+    """Configure your Hugging Face API token.
+
+    If --token is not provided, you will be prompted to enter it interactively.
+    Get a token at https://huggingface.co/settings/tokens (select 'Write' permission).
+    """
+    from defty.cloud.config import save_hf_token
+
+    if token is None:
+        click.echo("Set up Hugging Face API token for dataset upload & cloud training.")
+        click.echo("Get one at: https://huggingface.co/settings/tokens")
+        click.echo("(Select 'Write' permission)\n")
+        token = click.prompt("Paste your HF token (hf_...)", hide_input=True)
+    token = token.strip()
+    if not token:
+        click.echo("Error: empty token.", err=True)
+        sys.exit(1)
+
+    save_hf_token(token)
+    click.echo("✓ Token saved to ~/.defty/config.yaml")
+
+    # Verify the token
+    try:
+        from huggingface_hub import HfApi
+
+        api = HfApi(token=token)
+        user = api.whoami()
+        click.echo(f"✓ Authenticated as: {user.get('name', 'unknown')}")
+    except Exception as exc:
+        click.echo(f"⚠  Token saved but verification failed: {exc}", err=True)
+
+
+@cloud.command("status")
+def cloud_status() -> None:
+    """Show current cloud configuration and token status."""
+    from defty.cloud.config import get_hf_token
+
+    token = get_hf_token()
+
+    click.echo("\n☁  Cloud Configuration")
+    click.echo("─" * 40)
+
+    if token:
+        masked = token[:6] + "…" + token[-4:] if len(token) > 10 else "***"
+        click.echo(f"  HF Token  : {masked}")
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi(token=token)
+            user = api.whoami()
+            click.echo(f"  HF User   : {user.get('name', 'unknown')}")
+        except Exception:
+            click.echo("  HF User   : (could not verify)")
+    else:
+        click.echo("  HF Token  : not configured")
+        click.echo("  Run 'defty cloud setup' to configure")
+
+    # Show provider status
+    from defty.cloud.trainer import list_providers
+
+    click.echo("\n  Training Providers:")
+    for p in list_providers():
+        mark = "✓" if p["configured"] == "yes" else "✗"
+        click.echo(f"    {mark} {p['name']:<25} [{p['id']}]")
+    click.echo()
+
+
+@cloud.command("upload")
+@click.option("--path", "-p", default=None, help="Path to project.yaml.")
+@click.option("--dataset", "-d", default=None, help="Dataset name to upload (default: latest).")
+@click.option("--repo-id", default=None, help="HF Hub repo ID (username/dataset-name).")
+@click.option("--private", is_flag=True, help="Make the Hub repository private.")
+def cloud_upload(path, dataset, repo_id, private) -> None:
+    """Upload a dataset to the Hugging Face Hub.
+
+    Uploads the specified (or latest) recorded dataset. If no token is
+    configured, you will be prompted to enter one.
+
+    \b
+    Examples:
+        defty cloud upload                         # upload latest dataset
+        defty cloud upload -d my_robot_003         # upload specific dataset
+        defty cloud upload --repo-id user/my-data  # custom repo name
+        defty cloud upload --private               # private repository
+    """
+    from defty.cloud.uploader import upload_dataset
+    from defty.recording.recorder import _latest_dataset
+
+    yaml_path, proj = _ensure_project(path)
+    data_dir = yaml_path.parent / "data"
+
+    if dataset:
+        dataset_path = data_dir / dataset
+    else:
+        latest = _latest_dataset(data_dir) if data_dir.exists() else None
+        if not latest:
+            click.echo("No datasets found. Record one first: defty record", err=True)
+            sys.exit(1)
+        dataset_path = data_dir / latest
+        click.echo(f"Using latest dataset: {latest}")
+
+    try:
+        upload_dataset(dataset_path, repo_id=repo_id, private=private, interactive=True)
+    except (FileNotFoundError, RuntimeError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cloud.command("train")
+@click.option("--path", "-p", default=None, help="Path to project.yaml.")
+@click.option("--dataset", "-d", default=None, help="Dataset repo_id on HF Hub.")
+@click.option(
+    "--provider",
+    type=click.Choice(["huggingface", "google", "azure"], case_sensitive=False),
+    default="huggingface",
+    show_default=True,
+    help="Cloud training provider.",
+)
+@click.option("--steps", default=50000, type=int, show_default=True, help="Training steps.")
+@click.option("--batch-size", default=8, type=int, show_default=True, help="Batch size.")
+@click.option("--policy", default="act", type=str, show_default=True, help="Policy type.")
+def cloud_train(path, dataset, provider, steps, batch_size, policy) -> None:
+    """Start a cloud training job.
+
+    Trains a model on a cloud GPU using the specified provider.
+
+    \b
+    Examples:
+        defty cloud train                              # HF Spaces (default)
+        defty cloud train --provider google             # Google Vertex AI
+        defty cloud train -d user/my-dataset --steps 100000
+    """
+    from defty.cloud.trainer import get_trainer
+
+    if not dataset:
+        click.echo("Error: --dataset is required for cloud training.", err=True)
+        click.echo("  Upload your dataset first: defty cloud upload", err=True)
+        click.echo("  Then use the repo_id: defty cloud train -d username/dataset-name", err=True)
+        sys.exit(1)
+
+    config = {
+        "dataset_repo_id": dataset,
+        "num_train_steps": steps,
+        "batch_size": batch_size,
+        "policy_type": policy,
+    }
+
+    try:
+        trainer = get_trainer(provider)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    if not trainer.is_configured():
+        click.echo(f"⚠  Provider '{provider}' is not fully configured.", err=True)
+        click.echo("  Run 'defty cloud setup' or check the docs for setup instructions.", err=True)
+        sys.exit(1)
+
+    click.echo(f"\n☁  Starting cloud training on {trainer.name}")
+    click.echo(f"  Dataset  : {dataset}")
+    click.echo(f"  Provider : {provider}")
+    click.echo(f"  Policy   : {policy}")
+    click.echo(f"  Steps    : {steps}")
+    click.echo(f"  Batch    : {batch_size}\n")
+
+    try:
+        job = trainer.launch(config)
+        click.echo("✓ Training job launched!")
+        click.echo(f"  Job ID : {job.get('job_id', 'N/A')}")
+        click.echo(f"  Status : {job.get('status', 'submitted')}")
+        if job.get("url"):
+            click.echo(f"  URL    : {job['url']}")
+        click.echo(f"\n  Check progress: defty cloud check {job.get('job_id', '')}")
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@cloud.command("check")
+@click.argument("job_id")
+@click.option(
+    "--provider",
+    type=click.Choice(["huggingface", "google", "azure"], case_sensitive=False),
+    default="huggingface",
+    show_default=True,
+    help="Cloud training provider.",
+)
+def cloud_check(job_id, provider) -> None:
+    """Check the status of a cloud training job.
+
+    \b
+    Examples:
+        defty cloud check my-training-space
+        defty cloud check JOB_ID --provider google
+    """
+    from defty.cloud.trainer import get_trainer
+
+    try:
+        trainer = get_trainer(provider)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    try:
+        status = trainer.status(job_id)
+        click.echo("\n☁  Training Job Status")
+        click.echo("─" * 40)
+        for key, val in status.items():
+            click.echo(f"  {key:<12}: {val}")
+        click.echo()
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

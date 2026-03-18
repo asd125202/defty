@@ -326,8 +326,8 @@ def probe_opencv_cameras(max_index: int = 10) -> list[OpenCVCameraProbe]:
     resolution, and a single frame grab is attempted.  The result tells you
     which indices *actually* work, independent of PnP enumeration.
 
-    On Windows, uses the MSMF (Media Foundation) backend which handles
-    index-based access reliably.  Other platforms use the default backend.
+    Uses the default backend (CAP_ANY) which lets OpenCV choose the best
+    available capture API for the current platform.
 
     Returns:
         A list of :class:`OpenCVCameraProbe` for every index that opens
@@ -339,17 +339,9 @@ def probe_opencv_cameras(max_index: int = 10) -> list[OpenCVCameraProbe]:
         logger.warning("opencv-python not installed — cannot probe cameras")
         return []
 
-    system = platform.system()
-    if system == "Windows":
-        backend = 1400  # cv2.CAP_MSMF
-        backend_name = "MSMF"
-    else:
-        backend = 0  # cv2.CAP_ANY
-        backend_name = "ANY"
-
     results: list[OpenCVCameraProbe] = []
     for idx in range(max_index):
-        cap = cv2.VideoCapture(idx, backend)
+        cap = cv2.VideoCapture(idx)
         if cap.isOpened():
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -358,10 +350,10 @@ def probe_opencv_cameras(max_index: int = 10) -> list[OpenCVCameraProbe]:
             results.append(
                 OpenCVCameraProbe(
                     index=idx, width=w, height=h,
-                    can_read=bool(ret), backend=backend_name,
+                    can_read=bool(ret), backend="ANY",
                 )
             )
-            logger.debug("OpenCV index %d: %dx%d read=%s (%s)", idx, w, h, ret, backend_name)
+            logger.debug("OpenCV index %d: %dx%d read=%s (ANY)", idx, w, h, ret)
         else:
             cap.release()
 

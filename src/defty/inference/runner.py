@@ -33,7 +33,6 @@ Two modes are supported:
 from __future__ import annotations
 
 import logging
-import platform
 from pathlib import Path
 
 from defty.project import find_project_root, load_project
@@ -205,33 +204,25 @@ def run(
     follower = followers[0]
 
     # Camera config (only if vision enabled).
-    # On Windows, force DirectShow backend — the default ANY backend tries
-    # the obsensor driver first, which fails for standard USB cameras.
     camera_configs: dict = {}
     if vision:
         for cam in cameras:
             try:
                 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-                from lerobot.cameras.configs import Cv2Backends
 
                 device = cam.get("device", "0")
                 idx = int(device) if str(device).isdigit() else device
-                backend = (
-                    Cv2Backends.MSMF
-                    if platform.system() == "Windows"
-                    else Cv2Backends.ANY
-                )
                 camera_configs[cam["id"]] = OpenCVCameraConfig(
                     index_or_path=idx,
                     width=cam.get("width", 640),
                     height=cam.get("height", 480),
                     fps=int(cam.get("fps", 30)),
-                    backend=backend,
                 )
             except ImportError:
                 logger.warning(
                     "OpenCV camera config unavailable; skipping camera %s",
                     cam.get("id"),
+                )
                 )
 
     follower_cfg = SOFollowerRobotConfig(

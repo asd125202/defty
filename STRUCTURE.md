@@ -21,6 +21,12 @@ defty/
 │       ├── project.py               # project.yaml CRUD (init/load/save)
 │       ├── utils.py                 # Shared utilities (spawn_rerun_detached)
 │       │
+│       ├── cloud/
+│       │   ├── __init__.py          # Re-exports key cloud symbols
+│       │   ├── config.py            # Token & config management (~/.defty/config.yaml)
+│       │   ├── uploader.py          # Upload datasets to HF Hub
+│       │   └── trainer.py           # Cloud training (HF/Google/Azure)
+│       │
 │       ├── hardware/
 │       │   ├── __init__.py          # Re-exports from submodules
 │       │   ├── detector.py          # Serial port & camera scanning
