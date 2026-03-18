@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make_policy_config()` factory — new upstream policies are automatically
   supported without code changes.
 
+### Added
+
+- `transformers` added to core dependencies — required by VLA policies
+  (`pi0`, `pi0_fast`, `pi05`, `smolvla`, etc.) for tokenizer loading.
+
 ## [0.2.3] — 2026-03-18
 
 ### Fixed

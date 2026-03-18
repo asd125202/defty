@@ -37,6 +37,7 @@ dependencies = [
     "lerobot[feetech]>=0.5.0",
     "torch>=2.3.0",  # explicit so [tool.uv.sources] index selection applies
     "huggingface-hub>=0.20.0",
+    "transformers>=4.38.0",  # required by VLA policies (pi0, pi0_fast, smolvla, etc.)
 ]
 
 [project.optional-dependencies]
