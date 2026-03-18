@@ -245,9 +245,11 @@ so you never overwrite previous data.  Datasets are stored under `data/` in the 
 | Command | Description |
 |---------|-------------|
 | `defty datasets` | List all recorded datasets with stats |
+| `defty datasets rename OLD NEW` | Rename a dataset and update all model references |
 
 ```bash
 defty datasets
+defty datasets rename pick_cup_001 pick_cup_v2
 ```
 
 Example output:
@@ -301,9 +303,11 @@ under `models/` in the project directory.
 | Command | Description |
 |---------|-------------|
 | `defty models` | List all trained models with stats |
+| `defty models rename OLD NEW` | Rename a model and update internal path metadata |
 
 ```bash
 defty models
+defty models rename act_pick_cup_001 act_pick_cup_v2
 ```
 
 Example output:
