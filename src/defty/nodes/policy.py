@@ -31,13 +31,15 @@ class ACTPolicyNode(Node):
     """Run a trained ACT policy model to produce and send robot actions.
 
     On the first tick the model is loaded lazily from *model*.  Each tick
-    reads an observation from the connected robot, runs one inference step,
-    and immediately sends the resulting joint-position command back to the arm.
+    reads the pre-populated observation from the context, runs one inference
+    step through the full lerobot pre/post-processor pipeline (normalize →
+    model → unnormalize), and sends the resulting joint-position command to
+    the arm.
 
     Args:
         model: Path to the model directory (may contain a ``checkpoints/``
                sub-tree; the latest checkpoint is used automatically).
-        output_key: Blackboard key where the raw action tensor is stored.
+        output_key: Blackboard key where the raw action array is stored.
         name: Optional node name.
     """
 
@@ -46,6 +48,9 @@ class ACTPolicyNode(Node):
         self.model_path = model
         self.output_key = output_key
         self._policy: Any = None
+        self._preprocessor: Any = None
+        self._postprocessor: Any = None
+        self._device: Any = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -67,7 +72,7 @@ class ACTPolicyNode(Node):
         return model_dir
 
     def _load_policy(self) -> None:
-        """Lazily load the ACT policy from the model directory."""
+        """Lazily load the ACT policy and its pre/post-processor pipelines."""
         if self._policy is not None:
             return
         model_dir = self._resolve_model_dir()
@@ -76,12 +81,23 @@ class ACTPolicyNode(Node):
         try:
             import torch
             from lerobot.policies.act.modeling_act import ACTPolicy
+            from lerobot.policies.factory import make_pre_post_processors
+
+            device_str = "cuda" if torch.cuda.is_available() else "cpu"
+            self._device = torch.device(device_str)
 
             self._policy = ACTPolicy.from_pretrained(str(model_dir))
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            self._policy = self._policy.to(device)
+            self._policy = self._policy.to(self._device)
             self._policy.eval()
-            logger.info("Loaded ACT policy from %s on %s", model_dir, device)
+
+            # Pre-processor: normalizes inputs (observation.state + images).
+            # Post-processor: unnormalizes the raw model output back to degree units.
+            # Both are saved alongside the model weights in policy_preprocessor.json /
+            # policy_postprocessor.json + matching .safetensors stat files.
+            self._preprocessor, self._postprocessor = make_pre_post_processors(
+                self._policy.config, pretrained_path=str(model_dir)
+            )
+            logger.info("Loaded ACT policy from %s on %s", model_dir, device_str)
         except ImportError as exc:
             raise RuntimeError(f"lerobot import failed: {exc}") from exc
 
@@ -102,53 +118,54 @@ class ACTPolicyNode(Node):
 
         try:
             import numpy as np
-            import torch
 
-            # Read pre-populated observations from context (engine calls
-            # _refresh_context() before each tick — no need to re-read robot)
-            batch: dict[str, Any] = {}
+            # Build observation dict as numpy arrays — lerobot's predict_action /
+            # prepare_observation_for_inference expects numpy (not tensors).
+            obs: dict[str, Any] = {}
 
-            # --- joint state ---
             state = context.joint_states.get("observation.state")
             if state is not None:
-                state_arr = np.asarray(state, dtype=np.float32)
-                batch["observation.state"] = torch.from_numpy(state_arr).unsqueeze(0)
+                obs["observation.state"] = np.asarray(state, dtype=np.float32)
 
-            # --- camera images ---
             for key, value in context.cameras.items():
                 if key.startswith("observation.images."):
-                    img = np.asarray(value, dtype=np.float32) / 255.0
-                    if img.ndim == 3:
-                        img = img.transpose(2, 0, 1)  # HWC → CHW
-                    batch[key] = torch.from_numpy(img).unsqueeze(0)  # [1, C, H, W]
+                    # Keep as uint8 HWC — prepare_observation_for_inference
+                    # handles CHW conversion and /255 normalisation internally.
+                    obs[key] = np.asarray(value)
 
-            if not batch:
+            if not obs:
                 logger.warning("ACTPolicyNode: context has no observation data")
                 return NodeStatus.failure(reason="empty_observation")
 
-            # Move tensors to policy device
-            device = next(self._policy.parameters()).device
-            batch = {k: v.to(device) for k, v in batch.items()}
+            # Full inference pipeline: normalize → forward → unnormalize.
+            # This replicates exactly what lerobot's predict_action() does so
+            # that action values are in the same units as the training data
+            # (degrees for SO-101 with use_degrees=True).
+            from lerobot.utils.control_utils import predict_action
 
-            # Run inference - select_action returns [1, action_dim] in lerobot 0.5.0
-            action: Any = self._policy.select_action(batch)  # [1, n_actions] or [n_actions]
-            action_np = action.detach().cpu().numpy().flatten()  # always → 1-D
+            action = predict_action(
+                observation=obs,
+                policy=self._policy,
+                device=self._device,
+                preprocessor=self._preprocessor,
+                postprocessor=self._postprocessor,
+                use_amp=False,
+            )
+
+            # action shape: [1, n_motors] — squeeze batch dim
+            action_np = action.squeeze(0).cpu().numpy()
 
             # Store in blackboard
             context.memory[self.output_key] = action_np
 
-            # Send to robot using motor .pos keys from joint_states
+            # Map to {motor_name.pos: float} and send to robot.
             motor_names: list[str] = context.joint_states.get("_motor_names") or []
             if motor_names and len(action_np) == len(motor_names):
-                robot_action = {
-                    f"{name}.pos": int(round(float(val)))
-                    for name, val in zip(motor_names, action_np)
-                }
+                robot_action = {f"{name}.pos": float(val) for name, val in zip(motor_names, action_np)}
                 context.robot.send_action(robot_action)
             else:
                 logger.warning(
-                    "ACTPolicyNode: motor_names length %d != action length %d; "
-                    "action not sent",
+                    "ACTPolicyNode: motor_names length %d != action length %d; action not sent",
                     len(motor_names),
                     len(action_np),
                 )
