@@ -886,15 +886,28 @@ def record(
 # ── defty datasets ───────────────────────────────────────────────────────────
 
 
-@main.command()
+@main.group(invoke_without_command=True)
 @click.option("--path", "-p", default=None, hidden=True)
-def datasets(path) -> None:
-    """List all recorded datasets in this project.
+@click.pass_context
+def datasets(ctx, path) -> None:
+    """List and manage recorded datasets.
 
-    Shows each dataset with its episode count, total frames, FPS, task,
-    and disk size.  Datasets are stored under ``data/`` in the project
-    directory — each ``defty record`` run creates a new numbered dataset.
+    Without a sub-command shows each dataset with its episode count, total
+    frames, FPS, task, and disk size.  Datasets are stored under ``data/``
+    in the project directory — each ``defty record`` run creates a new
+    numbered dataset.
+
+    Sub-commands: rename
     """
+    if ctx.invoked_subcommand is None:
+        _datasets_list(path)
+
+
+import json
+
+
+def _datasets_list(path: str | None) -> None:
+    """Print the datasets table."""
     import json
 
     yaml_path, _project = _ensure_project(path)
@@ -939,6 +952,90 @@ def datasets(path) -> None:
 
         click.echo(f"  {d.name:<20} {episodes:>8} {frames:>8} {fps_val:>5} {size_str:>8}  {task_str}")
     click.echo()
+
+
+@datasets.command("rename")
+@click.argument("old_name")
+@click.argument("new_name")
+@click.option("--path", "-p", default=None, hidden=True)
+def datasets_rename(old_name, new_name, path) -> None:
+    """Rename a dataset and update all references.
+
+    Renames the dataset directory from OLD_NAME to NEW_NAME and updates
+    references in any model metadata and checkpoint configs that were
+    trained on OLD_NAME.
+
+    Example:
+
+    \b
+        defty datasets rename test_001 pick_cup_001
+    """
+    yaml_path, _project = _ensure_project(path)
+    data_dir = yaml_path.parent / "data"
+    models_dir = yaml_path.parent / "models"
+
+    old_dir = data_dir / old_name
+    new_dir = data_dir / new_name
+
+    if not old_dir.exists():
+        click.echo(f"Error: Dataset '{old_name}' not found in data/.", err=True)
+        sys.exit(1)
+    if new_dir.exists():
+        click.echo(f"Error: '{new_name}' already exists in data/.", err=True)
+        sys.exit(1)
+
+    # 1. Rename the directory
+    old_dir.rename(new_dir)
+    click.echo(f"  Renamed  data/{old_name}  →  data/{new_name}")
+
+    # 2. Update model references
+    updated_models: list[str] = []
+    if models_dir.exists():
+        for model_dir in models_dir.iterdir():
+            if not model_dir.is_dir():
+                continue
+            changed = False
+
+            # Update defty_model_info.json
+            info_path = model_dir / "defty_model_info.json"
+            if info_path.exists():
+                try:
+                    info = json.loads(info_path.read_text(encoding="utf-8"))
+                    if info.get("dataset") == old_name:
+                        info["dataset"] = new_name
+                        info_path.write_text(json.dumps(info, indent=2), encoding="utf-8")
+                        changed = True
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            # Update lerobot train_config.json in all checkpoints
+            for tc_path in model_dir.glob("checkpoints/*/pretrained_model/train_config.json"):
+                try:
+                    tc = json.loads(tc_path.read_text(encoding="utf-8"))
+                    ds = tc.get("dataset", {})
+                    modified = False
+                    if ds.get("repo_id") == f"local/{old_name}":
+                        ds["repo_id"] = f"local/{new_name}"
+                        modified = True
+                    root = ds.get("root", "")
+                    if root and (f"/{old_name}" in root or f"\\{old_name}" in root):
+                        ds["root"] = root.replace(f"/{old_name}", f"/{new_name}").replace(
+                            f"\\{old_name}", f"\\{new_name}"
+                        )
+                        modified = True
+                    if modified:
+                        tc["dataset"] = ds
+                        tc_path.write_text(json.dumps(tc, indent=2), encoding="utf-8")
+                        changed = True
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            if changed:
+                updated_models.append(model_dir.name)
+
+    if updated_models:
+        click.echo(f"  Updated references in: {', '.join(updated_models)}")
+    click.echo(f"Done. Dataset renamed to '{new_name}'.")
 
 
 def _read_dataset_task(dataset_dir: Path) -> str:
@@ -1066,17 +1163,24 @@ def train(path, policy, dataset_name, model_name, steps, batch_size, lr,
 # ── defty models ─────────────────────────────────────────────────────────────
 
 
-@main.command()
+@main.group(invoke_without_command=True)
 @click.option("--path", "-p", default=None, hidden=True)
-def models(path) -> None:
-    """List all trained models in this project.
+@click.pass_context
+def models(ctx, path) -> None:
+    """List and manage trained models.
 
-    Shows each model with its policy type, training steps, source dataset,
-    and disk size.  Models are stored under ``models/`` in the project
-    directory.
+    Without a sub-command shows each model with its policy type, training
+    steps, source dataset, and disk size.  Models are stored under
+    ``models/`` in the project directory.
+
+    Sub-commands: rename
     """
-    import json
+    if ctx.invoked_subcommand is None:
+        _models_list(path)
 
+
+def _models_list(path: str | None) -> None:
+    """Print the models table."""
     yaml_path, _project = _ensure_project(path)
     models_dir = yaml_path.parent / "models"
 
@@ -1149,6 +1253,58 @@ def models(path) -> None:
 
         click.echo(f"  {d.name:<22} {policy_str:>10} {steps_str:>8} {size_str:>8}  {ds_str}")
     click.echo()
+
+
+@models.command("rename")
+@click.argument("old_name")
+@click.argument("new_name")
+@click.option("--path", "-p", default=None, hidden=True)
+def models_rename(old_name, new_name, path) -> None:
+    """Rename a model and update internal path references.
+
+    Renames the model directory from OLD_NAME to NEW_NAME and updates
+    the ``output_dir`` field stored in its checkpoint training configs.
+
+    Example:
+
+    \b
+        defty models rename act_test_012_001 pick_cup_act_v1
+    """
+    yaml_path, _project = _ensure_project(path)
+    models_dir = yaml_path.parent / "models"
+
+    old_dir = models_dir / old_name
+    new_dir = models_dir / new_name
+
+    if not old_dir.exists():
+        click.echo(f"Error: Model '{old_name}' not found in models/.", err=True)
+        sys.exit(1)
+    if new_dir.exists():
+        click.echo(f"Error: '{new_name}' already exists in models/.", err=True)
+        sys.exit(1)
+
+    # 1. Rename the directory
+    old_dir.rename(new_dir)
+    click.echo(f"  Renamed  models/{old_name}  →  models/{new_name}")
+
+    # 2. Update output_dir in train_config.json for all checkpoints
+    updated: list[str] = []
+    for tc_path in new_dir.glob("checkpoints/*/pretrained_model/train_config.json"):
+        try:
+            tc = json.loads(tc_path.read_text(encoding="utf-8"))
+            old_out = tc.get("output_dir", "")
+            if old_out and (f"/{old_name}" in old_out or f"\\{old_name}" in old_out):
+                tc["output_dir"] = old_out.replace(
+                    f"/{old_name}", f"/{new_name}"
+                ).replace(f"\\{old_name}", f"\\{new_name}")
+                tc_path.write_text(json.dumps(tc, indent=2), encoding="utf-8")
+                updated.append(str(tc_path.relative_to(new_dir)))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    if updated:
+        click.echo(f"  Updated output_dir in: {len(updated)} checkpoint config(s)")
+    click.echo(f"Done. Model renamed to '{new_name}'.")
 
 
 # ── defty replay ─────────────────────────────────────────────────────────────

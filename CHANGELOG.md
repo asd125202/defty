@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`defty datasets rename OLD NEW`** — rename a dataset directory and
+  automatically update the `dataset` field in all model metadata files
+  (`defty_model_info.json`) and lerobot checkpoint `train_config.json` files
+  that reference the old name.
+- **`defty models rename OLD NEW`** — rename a model directory and update
+  the `output_dir` field stored in its checkpoint training configs.
 - **`defty train --from-model MODEL`** — fine-tune from an existing trained model.
   Loads the source model's architecture and weights via `pretrained_path`, then
   trains in a new auto-numbered output directory on any dataset.  Output names are
