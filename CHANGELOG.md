@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 1 — Node Engine** (`src/defty/nodes/`)
+  - `Node` ABC with `tick(context) → NodeStatus` pattern
+  - `NodeStatus` result type with SUCCESS / FAILURE / RUNNING states
+  - `Context` data container (cameras, joint_states, memory blackboard, robot)
+  - `RobotInterface` ABC for hardware abstraction
+  - `SequenceNode` — tick children in order, all must succeed
+  - `SelectorNode` — tick children in order, first success wins
+  - `RepeatNode` — repeat child N times or until condition (`times=-1` for infinite)
+  - `ParallelNode` — concurrent child execution via ThreadPoolExecutor
+  - `BehaviorTreeRunner` — main tick loop with frequency control + SIGINT handling
+- **Phase 2 — Leaf Nodes** (`src/defty/nodes/`)
+  - `CameraCaptureNode` — read camera frames into context
+  - `JointControlNode` — send joint positions from blackboard to robot
+  - `GripperOpenNode` / `GripperCloseNode` — gripper control
+  - `RelativeMoveNode` — end-effector relative movement
+  - `ACTPolicyNode` — run trained ACT/Diffusion policy models (lazy loading)
+  - `WaitNode` — non-blocking timed wait using RUNNING state
+  - `ConditionNode` — blackboard condition checks (key exists, value match, predicate)
+  - `LeRobotSO101Interface` — RobotInterface implementation for SO-101 arm
+- **Phase 3 — Agent System** (`src/defty/agents/`)
+  - `.defty` file format — restricted Python syntax for safe behavior-tree definitions
+  - AST-based parser with security validation (no imports, no function/class defs)
+  - `NodeRegistry` — maps node type names to classes with auto-discovery
+  - `AgentRef` node — compose agents by referencing other .defty files
+  - `AgentManager` — CRUD operations for agents stored in `~/.defty/agents/`
+  - `defty agent create <name>` — generate agent from template
+  - `defty agent run <name>` — parse → build tree → connect hardware → execute
+  - `defty agent list` — list agents with version, robot type, node count
+  - `defty agent info <name>` — show tree structure and dependencies
+- `tests/test_nodes.py` — 49 tests for node engine and leaf nodes
+- `tests/test_agents.py` — 32 tests for parser, registry, manager, AgentRef
+
+### Added (earlier)
+
 - **`SPEC.md`** — comprehensive project specification: vision, node system architecture,
   six Physical AI paths, agent concept, file formats, and Alpha roadmap (M0–M5)
 - **`defty run` command** — run a trained policy on the robot autonomously
@@ -20,7 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `defty models` command — list all trained models with policy type, steps, source dataset, size
 - `defty replay` command — visualize a recorded episode in Rerun (`--episode`, `--save`)
 - `defty scan cameras --preview` — live ASCII streaming preview (press `q` to advance cameras)
-- `defty scan cameras --opencv` — probe real OpenCV VideoCapture indices to find working cameras
 - `defty teleoperate --display` — Rerun viewer spawned as detached process (no Ctrl+C traceback)
 - `defty record --resume` — append episodes to an existing dataset
 - Auto-numbered datasets: each `defty record` run creates `<project>_001`, `_002`, …
@@ -29,7 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/defty/utils.py` — `spawn_rerun_detached()` shared utility for Ctrl+C-safe Rerun
 - SVT-AV1 encoder noise suppressed during recording (fd-level stdout redirect)
 - Phase-separator logging for recording: visual `───` banners for episode transitions
-- `probe_opencv_cameras()` in `detector.py` — try indices 0-9 with real OpenCV capture
 
 ### Changed
 
@@ -37,9 +69,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   models stored in `models/<name>/` (not `outputs/`), auto-selects latest dataset
 - `defty record` improved: auto-numbered datasets, cleaner banner, partial dir auto-cleanup
 - `defty scan cameras --preview` changed from single-frame to live ANSI streaming
-- `defty status` now verifies hardware connectivity (opens serial ports and cameras)
-- Camera backend changed to MSMF (Media Foundation) on Windows — DSHOW and CAP_ANY
-  both fail for standard USB cameras due to obsensor driver interference
 
 ### Fixed
 
@@ -49,8 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `defty record` `ValueError: not enough values to unpack` — auto-prefix `local/` to bare names
 - `defty teleoperate --display` traceback on Ctrl+C — rerun spawned in separate process group
 - `defty record` `play_sounds` PowerShell failure on Windows — disabled by default
-- `defty record` ConnectionError retry: smart resume detection (no episodes → fresh start)
-- Camera health check used CAP_ANY backend which fails on Windows — now uses MSMF
 
 ### Added (earlier)
 

@@ -144,9 +144,8 @@ def init(directory: str, name: str | None, description: str) -> None:
 @main.command()
 @click.option("--path", "-p", default=None, help="Path to project.yaml.")
 def status(path: str | None) -> None:
-    """Show current project status and verify hardware connectivity."""
+    """Show current project status."""
     from defty.platform import detect_os
-    from defty.hardware.health import check_all_health
 
     yaml_path, project = _ensure_project(path)
 
@@ -158,34 +157,13 @@ def status(path: str | None) -> None:
     click.echo(f"Project:  {proj.get('name', '(unnamed)')}")
     click.echo(f"Location: {yaml_path.parent}")
     click.echo(f"OS:       {detect_os().value}")
-
-    report = check_all_health(project)
-    arm_reports = {r.arm_id: r for r in report.arms}
-    cam_reports = {r.camera_id: r for r in report.cameras}
-
     click.echo(f"Arms:     {len(arms)}")
     for arm in arms:
         calib = "calibrated" if arm.get("calibration") else "not calibrated"
-        r = arm_reports.get(arm["id"])
-        if r and r.all_motors_ok:
-            icon = click.style("✓", fg="green")
-        elif r and r.reachable:
-            icon = click.style("⚠", fg="yellow")
-        else:
-            icon = click.style("✗", fg="red")
-        click.echo(f"  {icon} {arm['id']} ({arm.get('role', '?')}) on {arm.get('port', '?')} [{calib}]")
-        if r and r.error:
-            click.echo(f"    Error: {r.error}")
+        click.echo(f"  - {arm['id']} ({arm.get('role', '?')}) on {arm.get('port', '?')} [{calib}]")
     click.echo(f"Cameras:  {len(cameras)}")
     for cam in cameras:
-        r = cam_reports.get(cam["id"])
-        if r and r.online:
-            icon = click.style("✓", fg="green")
-        else:
-            icon = click.style("✗", fg="red")
-        click.echo(f"  {icon} {cam['id']} on {cam.get('device', '?')} ({cam.get('position', '?')})")
-        if r and r.error:
-            click.echo(f"    Error: {r.error}")
+        click.echo(f"  - {cam['id']} on {cam.get('device', '?')} ({cam.get('position', '?')})")
 
 
 # ── defty scan ───────────────────────────────────────────────────────────────
@@ -277,45 +255,25 @@ def scan_find_port() -> None:
 
 @scan.command("cameras")
 @click.option("--preview", is_flag=True, help="Live ASCII art stream from each camera (press q to advance, Ctrl+C to quit).")
-@click.option("--opencv", is_flag=True, help="Probe with OpenCV to find real working indices.")
-def scan_cameras(preview: bool, opencv: bool) -> None:
+def scan_cameras(preview: bool) -> None:
     """List all connected cameras with fingerprint data.
 
     Use --preview to stream a live ASCII-art view from each camera so you
     can visually identify which index belongs to which physical device.
     Press 'q' to move to the next camera, Ctrl+C to stop.
-
-    Use --opencv to probe which camera indices actually work with
-    OpenCV's VideoCapture (the backend used for recording).
     """
     from defty.hardware.detector import list_cameras
 
     cameras = list_cameras()
     if not cameras:
         click.echo("No cameras found.")
-    else:
-        click.echo("System cameras (PnP enumeration):")
-        for c in cameras:
-            click.echo(f"  [{c.index}] {c.name or '(unnamed)'}")
-            click.echo(f"    device:      {c.device}")
-            click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
-            if preview:
-                _camera_ascii_stream(c.index)
-
-    if opencv:
-        from defty.hardware.detector import probe_opencv_cameras
-
-        click.echo("")
-        click.echo("OpenCV probe (real VideoCapture test):")
-        probed = probe_opencv_cameras()
-        if not probed:
-            click.echo("  No working OpenCV camera indices found.")
-        else:
-            for p in probed:
-                status = "OK" if p.can_read else "open but no frame"
-                click.echo(f"  [{p.index}] {p.width}x{p.height}  {status}  (backend: {p.backend})")
-        click.echo("")
-        click.echo("Tip: Use the OpenCV indices above with 'defty setup add-camera --device <index>'")
+        return
+    for c in cameras:
+        click.echo(f"  [{c.index}] {c.name or '(unnamed)'}")
+        click.echo(f"    device:      {c.device}")
+        click.echo(f"    hardware_id: {c.hardware_id or '(none)'}")
+        if preview:
+            _camera_ascii_stream(c.index)
 
 
 def _camera_ascii_stream(index: int, width: int = 80) -> None:
@@ -335,7 +293,7 @@ def _camera_ascii_stream(index: int, width: int = 80) -> None:
         kernel32.GetConsoleMode(handle, ctypes.byref(mode))
         kernel32.SetConsoleMode(handle, mode.value | 4)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
 
-    cap = cv2.VideoCapture(index, cv2.CAP_MSMF if sys.platform == "win32" else cv2.CAP_ANY)
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY)
     if not cap.isOpened():
         click.echo(f"  (could not open camera {index})")
         return
@@ -1381,6 +1339,114 @@ def uninstall() -> None:
     click.echo("To also remove uv:")
     click.echo("  Linux/macOS:  rm ~/.local/bin/uv ~/.local/bin/uvx")
     click.echo("  Windows:      Remove-Item $env:USERPROFILE\\.local\\bin\\uv.exe")
+
+
+# ── defty agent ───────────────────────────────────────────────────────────────
+
+
+@main.group()
+def agent() -> None:
+    """Manage .defty behavior-tree agents."""
+
+
+@agent.command("create")
+@click.argument("name")
+@click.option("--robot", "-r", default="so101", help="Robot type (default: so101).")
+def agent_create(name: str, robot: str) -> None:
+    """Create a new agent from a template."""
+    from defty.agents.manager import AgentManager
+
+    manager = AgentManager()
+    try:
+        agent_dir = manager.create(name, robot=robot)
+        click.echo(f"Created agent '{name}' at {agent_dir}")
+        click.echo(f"Edit: {agent_dir / f'{name}.defty'}")
+    except FileExistsError:
+        click.echo(f"Error: Agent '{name}' already exists.", err=True)
+        sys.exit(1)
+
+
+@agent.command("run")
+@click.argument("name")
+@click.option("--frequency", "-f", default=30, type=int, help="Tick frequency in Hz.")
+@click.option("--port", default=None, help="Serial port for robot arm.")
+def agent_run(name: str, frequency: int, port: str | None) -> None:
+    """Parse and run a .defty agent."""
+    from defty.agents.manager import AgentManager
+    from defty.nodes.base import Context
+    from defty.nodes.engine import BehaviorTreeRunner
+
+    manager = AgentManager()
+    definition = manager.load(name)
+    if definition is None:
+        click.echo(f"Error: Agent '{name}' not found.", err=True)
+        sys.exit(1)
+
+    tree = definition["tree"]
+    robot_type = definition.get("robot", "")
+
+    ctx = Context(language=definition.get("language", ""))
+
+    if port and robot_type == "so101":
+        try:
+            from defty.nodes.robots.so101 import LeRobotSO101Interface
+
+            robot = LeRobotSO101Interface(port=port)
+            robot.connect()
+            ctx.robot = robot
+            click.echo(f"Connected to SO-101 on {port}")
+        except Exception as exc:
+            click.echo(f"Warning: Could not connect robot: {exc}", err=True)
+
+    click.echo(f"Running agent '{name}' at {frequency} Hz  (Ctrl+C to stop)")
+    runner = BehaviorTreeRunner(tree, ctx, frequency=frequency)
+    try:
+        result = runner.run()
+        click.echo(f"Agent finished: {result.state.value} ({runner.tick_count} ticks)")
+    finally:
+        if ctx.robot is not None:
+            try:
+                ctx.robot.disconnect()
+            except Exception:
+                pass
+
+
+@agent.command("list")
+def agent_list() -> None:
+    """List all available agents."""
+    from defty.agents.manager import AgentManager
+
+    manager = AgentManager()
+    agents = manager.list_agents()
+    if not agents:
+        click.echo("No agents found. Create one with: defty agent create <name>")
+        return
+    click.echo(f"{'Name':<20} {'Version':<10} {'Robot':<10} {'Nodes':<8} Path")
+    click.echo("─" * 70)
+    for a in agents:
+        click.echo(f"{a['name']:<20} {a['version']:<10} {a['robot']:<10} {a['node_count']:<8} {a['path']}")
+
+
+@agent.command("info")
+@click.argument("name")
+def agent_info(name: str) -> None:
+    """Show detailed info about an agent."""
+    from defty.agents.manager import AgentManager
+
+    manager = AgentManager()
+    info = manager.info(name)
+    if info is None:
+        click.echo(f"Error: Agent '{name}' not found.", err=True)
+        sys.exit(1)
+    click.echo(f"Name:         {info['name']}")
+    click.echo(f"Version:      {info['version']}")
+    click.echo(f"Robot:        {info['robot']}")
+    click.echo(f"Node count:   {info['node_count']}")
+    click.echo(f"Path:         {info['path']}")
+    if info.get("dependencies"):
+        click.echo(f"Dependencies: {info['dependencies']}")
+    if info.get("tree_structure"):
+        click.echo(f"\nTree:\n{info['tree_structure']}")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
