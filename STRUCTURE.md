@@ -7,6 +7,7 @@ defty/
 ├── CONTRIBUTING.md                  # Coding standards & PR checklist
 ├── CHANGELOG.md                     # Keep-a-changelog format
 ├── STRUCTURE.md                     # This file
+├── SPEC.md                          # Project specification — vision, architecture, roadmap
 ├── pyproject.toml                   # Package definition, deps, ruff config
 ├── install.sh                       # One-line installer: Linux / macOS
 ├── install.ps1                      # One-line installer: Windows PowerShell

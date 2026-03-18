@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`SPEC.md`** — comprehensive project specification: vision, node system architecture,
+  six Physical AI paths, agent concept, file formats, and Alpha roadmap (M0–M5)
 - **`defty run` command** — run a trained policy on the robot autonomously
   - `--model-name` / `--episodes` / `--display` / `--record` / `--no-vision`
   - With vision (cameras + state) or without vision (state-only) mode
