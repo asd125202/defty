@@ -128,9 +128,9 @@ class ACTPolicyNode(Node):
             device = next(self._policy.parameters()).device
             batch = {k: v.to(device) for k, v in batch.items()}
 
-            # Run inference
-            action: Any = self._policy.select_action(batch)  # Tensor [n_actions]
-            action_np = action.detach().cpu().numpy()
+            # Run inference - select_action returns [1, action_dim] in lerobot 0.5.0
+            action: Any = self._policy.select_action(batch)  # [1, n_actions] or [n_actions]
+            action_np = action.detach().cpu().numpy().flatten()  # always → 1-D
 
             # Store in blackboard
             context.memory[self.output_key] = action_np
