@@ -24,6 +24,7 @@ Commands that do NOT need a project (scan, upgrade, version) work anywhere.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -1324,7 +1325,79 @@ def run(model_name, episodes, display, vision, record, dataset_name, fps,
         sys.exit(1)
 
 
+# ── defty version ────────────────────────────────────────────────────────────
+
+
+@main.command()
+def version() -> None:
+    """Show defty version, installation path, and environment info."""
+    click.echo(f"defty {__version__}")
+    click.echo(f"  Python:   {sys.version.split()[0]}")
+    click.echo(f"  Platform: {sys.platform}")
+    click.echo(f"  Binary:   {Path(sys.argv[0]).resolve()}")
+
+    # Check for lerobot
+    try:
+        import importlib.metadata
+
+        lr_ver = importlib.metadata.version("lerobot")
+        click.echo(f"  LeRobot:  {lr_ver}")
+    except Exception:
+        click.echo("  LeRobot:  not installed")
+
+    # Check for torch
+    try:
+        import importlib.metadata
+
+        torch_ver = importlib.metadata.version("torch")
+        click.echo(f"  PyTorch:  {torch_ver}")
+    except Exception:
+        click.echo("  PyTorch:  not installed")
+
+    # Warn about stale installations
+    stale = _detect_stale_defty()
+    if stale:
+        click.echo()
+        click.echo("⚠  Stale defty installation(s) detected:")
+        for s in stale:
+            click.echo(f"   {s}")
+        click.echo("   Remove with: pip uninstall defty  (in each conda env)")
+
+
 # ── defty upgrade ────────────────────────────────────────────────────────────
+
+
+def _detect_stale_defty() -> list[str]:
+    """Find stale defty installations that may shadow the uv-managed copy.
+
+    Returns a list of paths to defty executables that are NOT the expected
+    uv tools installation in ``~/.local/bin/``.
+    """
+    stale: list[str] = []
+    expected = Path.home() / ".local" / "bin"
+
+    if sys.platform == "win32":
+        # Check common conda/pip locations
+        import glob as _glob
+
+        for pattern in [
+            str(Path.home() / "miniforge3" / "Scripts" / "defty.exe"),
+            str(Path.home() / "miniconda3" / "Scripts" / "defty.exe"),
+            str(Path.home() / "anaconda3" / "Scripts" / "defty.exe"),
+        ]:
+            for match in _glob.glob(pattern):
+                stale.append(match)
+
+        # Also check if .local/bin is in PATH
+        path_dirs = os.environ.get("PATH", "").lower().split(";")
+        local_bin = str(expected).lower()
+        if not any(local_bin in d for d in path_dirs):
+            click.echo(
+                f"⚠  Warning: {expected} is not in your PATH.\n"
+                "   The upgraded defty may not be found. Run:\n"
+                f'   $env:PATH = "{expected};" + $env:PATH'
+            )
+    return stale
 
 
 @main.command()
@@ -1337,10 +1410,18 @@ def upgrade() -> None:
         click.echo("Error: 'uv' not found. Install: https://docs.astral.sh/uv/", err=True)
         sys.exit(1)
 
+    # Warn about stale installations that shadow the uv copy
+    stale = _detect_stale_defty()
+    if stale:
+        click.echo("⚠  Found stale defty installation(s) that may shadow upgrades:")
+        for s in stale:
+            click.echo(f"   {s}")
+        click.echo("   Remove with: pip uninstall defty  (in each conda env)")
+        click.echo()
+
     # Detect NVIDIA GPU via nvidia-smi (NOT torch.cuda — that returns False
     # when the CPU-only wheel is installed, creating a chicken-and-egg problem)
     _has_nvidia = _detect_nvidia_gpu()
-    _install_spec = f'"defty[cuda] @ git+{repo_url}"' if _has_nvidia else f"git+{repo_url}"
     if _has_nvidia:
         click.echo("NVIDIA GPU detected — upgrading with CUDA torch.")
 
@@ -1357,10 +1438,10 @@ def upgrade() -> None:
         # console window (so the user can see progress), then exit immediately
         # so the lock is released.  The batch script waits for our PID to
         # disappear before calling uv.
-        import os
+        import os as _os
         import tempfile
 
-        pid = os.getpid()
+        pid = _os.getpid()
         # Quote the spec for the batch file (handles the [cuda] brackets)
         bat_spec = f'"{_pkg_spec}"' if "[" in _pkg_spec else _pkg_spec
         bat_lines = [
@@ -1382,6 +1463,7 @@ def upgrade() -> None:
             close_fds=True,
         )
         click.echo("Upgrade started in a new window — please wait for it to complete.")
+        click.echo(f"After upgrade, verify with: defty version  (expect > {__version__})")
         sys.exit(0)
 
     # Linux / macOS: no file-locking issue, run directly.
