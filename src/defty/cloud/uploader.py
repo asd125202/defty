@@ -130,8 +130,12 @@ def upload_dataset(
     if token is None:
         token = _ensure_token(interactive=interactive)
 
-    # Resolve repo_id
+    # Resolve repo_id — must be "username/dataset-name" format
     if repo_id is None:
+        repo_id = dataset_path.name
+
+    if "/" not in repo_id:
+        # Bare name given — prepend the authenticated user's namespace
         try:
             from huggingface_hub import HfApi
 
@@ -140,7 +144,7 @@ def upload_dataset(
             username = user_info.get("name", "defty-user")
         except Exception:
             username = "defty-user"
-        repo_id = f"{username}/{dataset_path.name}"
+        repo_id = f"{username}/{repo_id}"
 
     dataset_size = _get_dataset_size(dataset_path)
     logger.info(

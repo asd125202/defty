@@ -53,6 +53,9 @@ def main(verbose: bool) -> None:
         level=level,
         format="%(levelname)-8s %(name)s: %(message)s",
     )
+    # Suppress noisy HTTP request logs from huggingface_hub/httpx
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 
 
 # ── Project helpers ──────────────────────────────────────────────────────────
