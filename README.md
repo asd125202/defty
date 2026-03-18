@@ -273,7 +273,7 @@ defty train
 
 # Specify dataset and policy
 defty train --dataset-name my-robot_001
-defty train --policy act                 # act (default), diffusion, tdmpc, vqbet
+defty train --policy act                 # act (default), diffusion, tdmpc, vqbet, pi0, pi0_fast, pi05, smolvla, sac, groot, xvla, wall_x
 defty train --policy diffusion
 
 # Training hyperparameters

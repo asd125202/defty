@@ -68,7 +68,8 @@ def train(
 
     Args:
         project_path: Path to ``project.yaml`` or its parent directory.
-        policy: Policy architecture name (``act``, ``diffusion``, ``tdmpc``, ``vqbet``).
+        policy: Policy architecture name — any model supported by LeRobot
+                (e.g. ``act``, ``diffusion``, ``pi0``, ``pi0_fast``, ``smolvla``, …).
         dataset_name: Dataset name from ``data/``.  Auto-selects latest if *None*.
         model_name: Name for the output model directory under ``models/``.
                     Auto-numbered if *None*.
@@ -154,35 +155,24 @@ def train(
     # Set policy type via the config's policy field
     # lerobot resolves policy from type string
     try:
-        from lerobot.policies.act.configuration_act import ACTConfig
-        from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
-        from lerobot.policies.tdmpc.configuration_tdmpc import TDMPCConfig
-        from lerobot.policies.vqbet.configuration_vqbet import VQBeTConfig
+        from lerobot.policies.factory import make_policy_config
 
-        policy_map = {
-            "act": ACTConfig,
-            "diffusion": DiffusionConfig,
-            "tdmpc": TDMPCConfig,
-            "vqbet": VQBeTConfig,
-        }
-        policy_cls = policy_map.get(policy.lower())
-        if policy_cls is not None:
-            import torch as _torch
-            policy_inst = policy_cls()
-            policy_inst.push_to_hub = False  # ACTConfig defaults push_to_hub=True
-            # Auto-select best available device; installer sets up the right torch wheel
-            # but guard here too in case of manual installs
-            if hasattr(policy_inst, "device"):
-                if _torch.cuda.is_available():
-                    policy_inst.device = "cuda"
-                elif getattr(_torch.backends, "mps", None) and _torch.backends.mps.is_available():
-                    policy_inst.device = "mps"
-                else:
-                    policy_inst.device = "cpu"
-                logger.info("Training device: %s", policy_inst.device)
-            cfg.policy = policy_inst
-        else:
-            raise RuntimeError(f"Unknown policy: {policy}")
+        policy_inst = make_policy_config(policy.lower())
+        import torch as _torch
+        policy_inst.push_to_hub = False
+        # Auto-select best available device; installer sets up the right torch wheel
+        # but guard here too in case of manual installs
+        if hasattr(policy_inst, "device"):
+            if _torch.cuda.is_available():
+                policy_inst.device = "cuda"
+            elif getattr(_torch.backends, "mps", None) and _torch.backends.mps.is_available():
+                policy_inst.device = "mps"
+            else:
+                policy_inst.device = "cpu"
+            logger.info("Training device: %s", policy_inst.device)
+        cfg.policy = policy_inst
+    except ValueError as exc:
+        raise RuntimeError(f"Unknown policy: {policy}. {exc}") from exc
     except ImportError as exc:
         raise RuntimeError(f"Policy '{policy}' not available: {exc}") from exc
 

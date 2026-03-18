@@ -918,8 +918,12 @@ def _read_dataset_task(dataset_dir: Path) -> str:
 @click.option("--path", "-p", default=None, hidden=True, help="Path to project.yaml.")
 @click.option(
     "--policy", default="act", show_default=True,
-    type=click.Choice(["act", "diffusion", "tdmpc", "vqbet"], case_sensitive=False),
-    help="Policy architecture.",
+    type=click.Choice([
+        "act", "diffusion", "tdmpc", "vqbet",
+        "pi0", "pi0_fast", "pi05",
+        "smolvla", "sac", "groot", "xvla", "wall_x",
+    ], case_sensitive=False),
+    help="Policy architecture (any LeRobot-supported model).",
 )
 @click.option("--dataset-name", default=None, help="Dataset name (from data/). Auto-selects latest if omitted.")
 @click.option("--model-name", default=None, help="Model name for output dir under models/. Auto-generated if omitted.")
