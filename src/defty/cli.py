@@ -1821,18 +1821,18 @@ def agent_run(name: str, frequency: int, port: str | None, path: str | None, no_
         cameras_config: dict = {}
         calibration_dir = Path("calibration")  # default
 
-        # Try to load project config for hardware info
-        if not port:
-            try:
-                from defty.project import find_project_root, load_project
+        # Always try to load project config for cameras + calibration dir
+        try:
+            from defty.project import find_project_root, load_project
 
-                yaml_path = find_project_root(Path(path) if path else Path.cwd())
-                project = load_project(yaml_path)
-                hw = project.get("hardware", {})
-                arms = hw.get("arms", [])
-                cameras = hw.get("cameras", [])
+            yaml_path = find_project_root(Path(path) if path else Path.cwd())
+            project = load_project(yaml_path)
+            hw = project.get("hardware", {})
+            arms = hw.get("arms", [])
+            cameras = hw.get("cameras", [])
 
-                # Find follower arm
+            # Find follower arm (only if --port not already given)
+            if not follower_port:
                 followers = [a for a in arms if a.get("role") == "follower"]
                 if followers:
                     follower = followers[0]
@@ -1844,20 +1844,21 @@ def agent_run(name: str, frequency: int, port: str | None, path: str | None, no_
                         err=True,
                     )
 
-                # Build cameras config
-                for cam in cameras:
-                    cam_id = cam.get("id", "camera")
-                    cameras_config[cam_id] = {
-                        "device": cam.get("device", "0"),
-                        "width": cam.get("width", 640),
-                        "height": cam.get("height", 480),
-                        "fps": cam.get("fps", 30),
-                    }
-                if cameras_config:
-                    click.echo(f"Found {len(cameras_config)} camera(s): {', '.join(cameras_config.keys())}")
+            # Build cameras config (always, regardless of --port)
+            for cam in cameras:
+                cam_id = cam.get("id", "camera")
+                cameras_config[cam_id] = {
+                    "device": cam.get("device", "0"),
+                    "width": cam.get("width", 640),
+                    "height": cam.get("height", 480),
+                    "fps": cam.get("fps", 30),
+                }
+            if cameras_config:
+                click.echo(f"Found {len(cameras_config)} camera(s): {', '.join(cameras_config.keys())}")
 
-                calibration_dir = yaml_path.parent / "calibration"
-            except (FileNotFoundError, ValueError) as exc:
+            calibration_dir = yaml_path.parent / "calibration"
+        except (FileNotFoundError, ValueError) as exc:
+            if not port:
                 click.echo(f"Warning: Could not load project config: {exc}", err=True)
                 click.echo(
                     "  Run inside a project directory or use --port to specify arm manually.", err=True
