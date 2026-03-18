@@ -26,6 +26,7 @@ import contextlib
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from defty.project import find_project_root, load_project
@@ -326,20 +327,73 @@ def record(
     phase_filter = _PhaseFilter()
     root_logger.addFilter(phase_filter)
 
+    # Retry settings — cheap servo arms lose connection frequently
+    _RECONNECT_INTERVAL_S = 10
+    _RECONNECT_TIMEOUT_S = 60
+    reconnect_deadline: float | None = None
+
     try:
-        with _suppress_c_stdout():
+        while True:
             try:
-                # @parser.wrap() passes cfg through when first arg is already the target type
-                lerobot_record(cfg)
-            except ValueError as exc:
-                if "add_frame" in str(exc):
-                    logger.warning(
-                        "Recording ended with an empty episode — "
-                        "you pressed → or Esc before the arm recorded any frames. "
-                        "All previously completed episodes were saved."
-                    )
-                else:
-                    raise
+                with _suppress_c_stdout():
+                    try:
+                        # @parser.wrap() passes cfg through when first arg is already the target type
+                        lerobot_record(cfg)
+                    except ValueError as exc:
+                        if "add_frame" in str(exc):
+                            logger.warning(
+                                "Recording ended with an empty episode — "
+                                "you pressed → or Esc before the arm recorded any frames. "
+                                "All previously completed episodes were saved."
+                            )
+                        else:
+                            raise
+                break  # Recording completed successfully
+
+            except ConnectionError as exc:
+                # Servo connection lost — discard current episode, retry
+                if reconnect_deadline is None:
+                    reconnect_deadline = time.time() + _RECONNECT_TIMEOUT_S
+
+                remaining = reconnect_deadline - time.time()
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Robot connection lost and could not reconnect "
+                        f"after {_RECONNECT_TIMEOUT_S}s.\n"
+                        f"  Last error: {exc}\n"
+                        f"  Completed episodes were saved to: {dataset_root}"
+                    ) from exc
+
+                logger.warning(
+                    "Robot connection lost — current episode discarded.\n"
+                    "  Error: %s\n"
+                    "  Retrying in %ds (timeout in %ds)...",
+                    exc, _RECONNECT_INTERVAL_S, int(remaining),
+                )
+                time.sleep(_RECONNECT_INTERVAL_S)
+
+                # Rebuild config with resume=True so completed episodes are kept
+                dataset_cfg = DatasetRecordConfig(
+                    repo_id=ds_name,
+                    single_task=task_desc,
+                    root=dataset_root,
+                    fps=record_fps,
+                    num_episodes=num_episodes,
+                    push_to_hub=push_to_hub,
+                    episode_time_s=episode_time_s,
+                    reset_time_s=reset_time_s,
+                    streaming_encoding=True,
+                )
+                cfg = RecordConfig(
+                    robot=follower_cfg,
+                    teleop=leader_cfg,
+                    dataset=dataset_cfg,
+                    display_data=display,
+                    display_ip=display_ip,
+                    display_port=display_port,
+                    resume=True,
+                    play_sounds=False,
+                )
     finally:
         root_logger.removeFilter(phase_filter)
         if rerun_proc is not None:
